@@ -61,10 +61,6 @@ MANIFEST
 **/*.ipynb
 notebooks/*.ipynb
 
-data/*
-!data/misc/
-!data/pmechdb/
-data/pmechdb/*
-!data/pmechdb/original/
-!data/pmechdb/original/**
-**/*checkpoints*
+data/flower_nature/*
+!data/flower_nature/.placeholder
+data/preprocessed/flower_new_dataset.csv
