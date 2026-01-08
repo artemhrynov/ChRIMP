@@ -64,3 +64,5 @@ notebooks/*.ipynb
 data/flower_nature/*
 !data/flower_nature/.placeholder
 data/preprocessed/flower_new_dataset.csv
+
+CONTRIBUTING.rst
