@@ -35,6 +35,11 @@ If you happen to do changes to these notebooks in `.ipynb` format, you can conve
 jupytext --set-formats ipynb,py:percent notebooks/<notebook_ipynb_path>
 ```
 
+## Article
+Preprint: https://arxiv.org/abs/2512.05722 
+
+PDF: https://arxiv.org/pdf/2512.05722
+
 ## Citation
 
 ```
