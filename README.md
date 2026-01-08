@@ -36,13 +36,11 @@ jupytext --set-formats ipynb,py:percent notebooks/<notebook_ipynb_path>
 ```
 
 ## Article
-Preprint: https://arxiv.org/abs/2512.05722 
 
-PDF: https://arxiv.org/pdf/2512.05722
+**Teaching Language Models Mechanistic Explainability Through Arrow-Pushing** ([ArXiv](https://arxiv.org/abs/2512.05722) | [PDF](https://arxiv.org/pdf/2512.05722))
 
-## Citation
-
-```
+**Citation:**
+```bibtex
 @article{neukomm2025teaching,
   title={Teaching Language Models Mechanistic Explainability Through Arrow-Pushing},
   author={Neukomm, Th{\'e}o A and Jon{\v{c}}ev, Zlatko and Schwaller, Philippe},
