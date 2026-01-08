@@ -66,3 +66,4 @@ data/flower_nature/*
 data/preprocessed/flower_new_dataset.csv
 
 CONTRIBUTING.rst
+docs/contributing.rst
