@@ -1,4 +1,3 @@
-
 periodic_table_matrix = [
     [
         "H",
@@ -239,4 +238,3 @@ periodic_table_matrix = [
         "Og",
     ],
 ]
-

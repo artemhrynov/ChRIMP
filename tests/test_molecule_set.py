@@ -9,10 +9,10 @@ def count_atoms(smiles):
     mol = Chem.MolFromSmiles(smiles)
     return Counter([a.GetSymbol() for a in mol.GetAtoms()])
 
-class TestMoleculeSet:
 
+class TestMoleculeSet:
     test_cases = [
-        ("O=[C-:1][Cl:2]", [('i', 1, 2)])
+        ("O=[C-:1][Cl:2]", [("i", 1, 2)])
         # etc...
     ]
 
@@ -29,5 +29,3 @@ class TestMoleculeSet:
         assert count_1 == count_2, f"Atom count changed for: {smiles}"
         assert count_1 == count_3, f"Atom count changed during move {move} on {smiles}"
         assert count_3 == count_4, f"Atom count changed for: {smiles} + move {move}"
-
-

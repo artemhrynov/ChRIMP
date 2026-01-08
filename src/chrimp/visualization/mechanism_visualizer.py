@@ -4,7 +4,6 @@ import re
 from PIL import Image
 import matplotlib.pyplot as plt
 import svgutils.transform as sg
-from typing import Union
 
 
 from chrimp.world.mechsmiles import MechSmiles
@@ -24,7 +23,12 @@ def remove_white_background(svg_string: str) -> str:
     return re.sub(r"<rect style='opacity:1\.0;fill:#FFFFFF;.*>", "", svg_string)
 
 
-def make_arrow_svg(arrow_len: float, h_max: float, arrow_thickness: float = 1.6, head_factor: float = 3.0) -> str:
+def make_arrow_svg(
+    arrow_len: float,
+    h_max: float,
+    arrow_thickness: float = 1.6,
+    head_factor: float = 3.0,
+) -> str:
     """
     Return a standalone SVG containing a horizontal arrow.
     """
@@ -59,7 +63,12 @@ def make_arrow_svg(arrow_len: float, h_max: float, arrow_thickness: float = 1.6,
     return dedent(svg).lstrip()
 
 
-def combine_svgs_with_arrows(svg_list: list[str], arrow_len: float = 80, arrow_thickness: float = 1.6, force_trailing_arrow: bool = False) -> str:
+def combine_svgs_with_arrows(
+    svg_list: list[str],
+    arrow_len: float = 80,
+    arrow_thickness: float = 1.6,
+    force_trailing_arrow: bool = False,
+) -> str:
     """
     Combine multiple SVG strings in a linear fashion with arrows between them.
 
@@ -117,17 +126,17 @@ def combine_svgs_with_arrows(svg_list: list[str], arrow_len: float = 80, arrow_t
 
     # Append all elements to master
     master.append(elements)
-    master.root.attrib['viewBox'] = f"0 0 {total_w} {h_max}"
+    master.root.attrib["viewBox"] = f"0 0 {total_w} {h_max}"
 
     # Add a white background rectangle at the beginning
     svg_string = master.to_str()
 
     # Decode if bytes
     if isinstance(svg_string, bytes):
-        svg_string = svg_string.decode('utf-8')
+        svg_string = svg_string.decode("utf-8")
 
     white_bg = f'<rect x="0" y="0" width="{total_w}" height="{h_max}" fill="#FFFFFF" opacity="1.0"/>'
-    svg_with_bg = re.sub(r'(<svg[^>]*>)', r'\1' + white_bg, svg_string, count=1)
+    svg_with_bg = re.sub(r"(<svg[^>]*>)", r"\1" + white_bg, svg_string, count=1)
 
     return svg_with_bg
 
@@ -157,13 +166,13 @@ def get_svg_dimensions(svg_obj) -> tuple[float, float]:
     # Fallback: try to extract from SVG attributes directly
     root = svg_obj.root
     if root is not None:
-        width = root.attrib.get('width', '0')
-        height = root.attrib.get('height', '0')
+        width = root.attrib.get("width", "0")
+        height = root.attrib.get("height", "0")
 
         try:
             # Remove 'pt' or 'px' suffix if present
-            width = float(re.sub(r'(pt|px)$', '', str(width)))
-            height = float(re.sub(r'(pt|px)$', '', str(height)))
+            width = float(re.sub(r"(pt|px)$", "", str(width)))
+            height = float(re.sub(r"(pt|px)$", "", str(height)))
 
             if width > 0 and height > 0:
                 return width, height
@@ -171,7 +180,7 @@ def get_svg_dimensions(svg_obj) -> tuple[float, float]:
             pass
 
         # Try viewBox as last resort
-        viewbox = root.attrib.get('viewBox', '')
+        viewbox = root.attrib.get("viewBox", "")
         if viewbox:
             try:
                 parts = viewbox.split()
@@ -234,17 +243,17 @@ def combine_rows_vertically(row_svg_list: list[str], row_spacing: float = 20) ->
 
     # Append all elements to master
     master.append(elements)
-    master.root.attrib['viewBox'] = f"0 0 {max_w} {total_h}"
+    master.root.attrib["viewBox"] = f"0 0 {max_w} {total_h}"
 
     # Add a white background rectangle at the beginning
     svg_string = master.to_str()
 
     # Decode if bytes
     if isinstance(svg_string, bytes):
-        svg_string = svg_string.decode('utf-8')
+        svg_string = svg_string.decode("utf-8")
 
     white_bg = f'<rect x="0" y="0" width="{max_w}" height="{total_h}" fill="#FFFFFF" opacity="1.0"/>'
-    svg_with_bg = re.sub(r'(<svg[^>]*>)', r'\1' + white_bg, svg_string, count=1)
+    svg_with_bg = re.sub(r"(<svg[^>]*>)", r"\1" + white_bg, svg_string, count=1)
 
     return svg_with_bg
 
@@ -253,17 +262,24 @@ class MechanismVisualizer:
     def __init__(self, mech_smiles_list: list[str]):
         self.mech_smiles_list = [MechSmiles(msmi) for msmi in mech_smiles_list]
 
-
-    def equilibrate(self,):
+    def equilibrate(
+        self,
+    ):
         """
         Equilibrate all the steps to not lose or create any atom
         """
         pass
 
-    def show(self, save_path=None, return_svg=False, max_msmi_in_one_row:int=-1):
-        return self.show_linear(save_path=save_path, return_svg=return_svg, max_msmi_in_one_row = max_msmi_in_one_row)
+    def show(self, save_path=None, return_svg=False, max_msmi_in_one_row: int = -1):
+        return self.show_linear(
+            save_path=save_path,
+            return_svg=return_svg,
+            max_msmi_in_one_row=max_msmi_in_one_row,
+        )
 
-    def show_linear(self, save_path=None, return_svg=False, max_msmi_in_one_row:int=-1):
+    def show_linear(
+        self, save_path=None, return_svg=False, max_msmi_in_one_row: int = -1
+    ):
         """
         The main util of this class, shows the global mechanism
 
@@ -274,9 +290,7 @@ class MechanismVisualizer:
         """
 
         # We will first collect all of the reactants side of the MechSmiles
-        structures_svg = [
-            m.show_reac(return_svg=True) for m in self.mech_smiles_list
-        ]
+        structures_svg = [m.show_reac(return_svg=True) for m in self.mech_smiles_list]
         structures_svg.append(self.mech_smiles_list[-1].show_prod(return_svg=True))
 
         # Remove white backgrounds from all SVGs to prevent overlapping
@@ -287,10 +301,12 @@ class MechanismVisualizer:
             # Split structures into rows
             rows_svg = []
             for i in range(0, len(structures_svg), max_msmi_in_one_row):
-                row_structures = structures_svg[i:i + max_msmi_in_one_row]
+                row_structures = structures_svg[i : i + max_msmi_in_one_row]
                 # Add trailing arrow for all rows except the last one
-                is_last_row = (i + max_msmi_in_one_row >= len(structures_svg))
-                row_svg = combine_svgs_with_arrows(row_structures, force_trailing_arrow=not is_last_row)
+                is_last_row = i + max_msmi_in_one_row >= len(structures_svg)
+                row_svg = combine_svgs_with_arrows(
+                    row_structures, force_trailing_arrow=not is_last_row
+                )
                 rows_svg.append(row_svg)
 
             # Combine rows vertically
@@ -301,29 +317,38 @@ class MechanismVisualizer:
 
         if save_path is not None:
             with open(save_path, "wb") as f:
-                f.write(combined_svg.encode('utf-8') if isinstance(combined_svg, str) else combined_svg)
+                f.write(
+                    combined_svg.encode("utf-8")
+                    if isinstance(combined_svg, str)
+                    else combined_svg
+                )
 
         if return_svg:
-            plt.close('all')  # Close any previous plots
+            plt.close("all")  # Close any previous plots
             return combined_svg
         elif save_path is None:
             # Show the svg with matplotlib
-            png_bytes = cairosvg.svg2png(bytestring=combined_svg.encode('utf-8') if isinstance(combined_svg, str) else combined_svg, scale=3, dpi=1000)
+            png_bytes = cairosvg.svg2png(
+                bytestring=combined_svg.encode("utf-8")
+                if isinstance(combined_svg, str)
+                else combined_svg,
+                scale=3,
+                dpi=1000,
+            )
             image = Image.open(io.BytesIO(png_bytes))
             plt.imshow(image)
-            plt.axis('off')
+            plt.axis("off")
             plt.show()
-
 
 
 if __name__ == "__main__":
     mechanism = [
         "CCCC(=O)NC1=C[CH:3]=[C:4](OC)C=C1.C[C:1](Cl)=[O:2]|((4, 3), 1);((1, 2), 2)",
         "CCCC(=O)NC1=CC([C:1](C)([O-:2])[Cl:3])[C+](OC)C=C1|(2, 1);((1, 3), 3)",
-        "CCCC(=O)NC1=C[C:3](C(C)=O)([H:4])[C+:1](OC)C=C1.[Cl-:2]|(2, 4);((4, 3), 1)"
+        "CCCC(=O)NC1=C[C:3](C(C)=O)([H:4])[C+:1](OC)C=C1.[Cl-:2]|(2, 4);((4, 3), 1)",
     ]
 
-    svg_res = MechanismVisualizer(mechanism).show_linear(return_svg = True)
+    svg_res = MechanismVisualizer(mechanism).show_linear(return_svg=True)
 
     mechanism = [
         "COC1=CC=C([N+:1]([O-])=[O:2])C=C1C(C)=O.[Cl:3][H:4].[H]Cl.[Zn:5]|(5, 1);((1, 2), 4);((4, 3), 3)",
@@ -340,9 +365,9 @@ if __name__ == "__main__":
         "COC1=CC=C(N)C=C1C(C)=O.O.[Cl-:2].[Cl][Zn+:1]|(2, 1)",
     ]
 
-    svg_res = MechanismVisualizer(mechanism).show_linear(return_svg = True, max_msmi_in_one_row=5)
+    svg_res = MechanismVisualizer(mechanism).show_linear(
+        return_svg=True, max_msmi_in_one_row=5
+    )
 
     with open("first_whole_mechanism.svg", "w") as f:
         f.write(svg_res)
-
-

@@ -7,3 +7,7 @@ build-backend = "setuptools.build_meta"
 # For smarter version schemes and other configuration options,
 # check out https://github.com/pypa/setuptools_scm
 version_scheme = "no-guess-dev"
+
+[tool.ruff.lint.per-file-ignores]
+# For notebooks we want to remove the error of not importing on top of the file
+"notebooks/*" = ["E402"] 

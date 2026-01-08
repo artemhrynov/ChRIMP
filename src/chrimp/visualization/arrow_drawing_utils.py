@@ -18,19 +18,15 @@ def cubic_bezier(P0, P1, P2, P3, t):
 
 def aa_control_points(p1, p2, reverse=False):
     angle = np.arctan2(p2[1] - p1[1], p2[0] - p1[0])
-    l = np.linalg.norm(p2 - p1)
-    h = (-1 if reverse else 1) * l / 4
+    length = np.linalg.norm(p2 - p1)
+    h = (-1 if reverse else 1) * length / 4
 
     # Imaginary point in the middle of the line at a height h
-    im_point_rho = l / 2
+    im_point_rho = length / 2
     im_point_phi = h
 
-    im_point_x = (
-        p1[0] + np.cos(angle) * im_point_rho - np.sin(angle) * im_point_phi
-    )
-    im_point_y = (
-        p1[1] + np.sin(angle) * im_point_rho + np.cos(angle) * im_point_phi
-    )
+    im_point_x = p1[0] + np.cos(angle) * im_point_rho - np.sin(angle) * im_point_phi
+    im_point_y = p1[1] + np.sin(angle) * im_point_rho + np.cos(angle) * im_point_phi
 
     im_point = np.array([im_point_x, im_point_y])
 
@@ -79,13 +75,13 @@ def baa_control_points(p1, p2, p3):
 
     angle_1 = np.arctan2(bc_vec[1], bc_vec[0])
     angle_2 = np.arctan2(ba_vec[1], ba_vec[0])
-    l = np.linalg.norm(ba_vec)
+    length = np.linalg.norm(ba_vec)
 
     control_point_1 = np.array(
-        [p2[0] - np.cos(angle_1) * 2 * l, p2[1] - np.sin(angle_1) * 2 * l]
+        [p2[0] - np.cos(angle_1) * 2 * length, p2[1] - np.sin(angle_1) * 2 * length]
     )
     control_point_2 = np.array(
-        [p2[0] - np.cos(angle_2) * 2 * l, p2[1] - np.sin(angle_2) * 2 * l]
+        [p2[0] - np.cos(angle_2) * 2 * length, p2[1] - np.sin(angle_2) * 2 * length]
     )
 
     return control_point_1, control_point_2
@@ -94,7 +90,6 @@ def baa_control_points(p1, p2, p3):
 def bond_atom_atom_attack(
     p1, p2, p3, color="k", show_ps=False, show_control_points=False, ax=None
 ):
-
     # If p2 == p3, p3 is part of the bond
     if np.allclose(p2, p3):
         p_mid = 0.5 * (p1 + p2)
@@ -126,12 +121,8 @@ def bond_atom_atom_attack(
 
     control_point_1, control_point_2 = baa_control_points(p_mid, p2, p3)
 
-    x = cubic_bezier(
-        p_mid[0], control_point_1[0], control_point_2[0], p3[0], s
-    )
-    y = cubic_bezier(
-        p_mid[1], control_point_1[1], control_point_2[1], p3[1], s
-    )
+    x = cubic_bezier(p_mid[0], control_point_1[0], control_point_2[0], p3[0], s)
+    y = cubic_bezier(p_mid[1], control_point_1[1], control_point_2[1], p3[1], s)
 
     if ax is None:
         ax = plt.gca()
@@ -189,9 +180,7 @@ if __name__ == "__main__":
 
         # Left plot: atom attacks atom
         ax1 = axes[0]
-        atom_atom_attack(
-            p0, p3_moved, show_ps=True, show_control_points=False, ax=ax1
-        )
+        atom_atom_attack(p0, p3_moved, show_ps=True, show_control_points=False, ax=ax1)
         ax1.set_title("Atom attacks Atom")
 
         # Right plot: bond attacks atom
@@ -205,4 +194,3 @@ if __name__ == "__main__":
     ani = FuncAnimation(fig, update, frames=100, interval=2000)
 
     plt.show()
-

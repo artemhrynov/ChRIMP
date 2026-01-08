@@ -10,7 +10,7 @@ smiles_list = [
     "C1=CC=C(CC)C(C)=C1",
     "c1cccc(CC)c1C",
     "[C]=O",
-    "[H]C([H])=O"
+    "[H]C([H])=O",
 ]
 
 print("Normal snippet")
@@ -22,12 +22,10 @@ for smiles in smiles_list:
 print("Custom snippet")
 for smiles in smiles_list:
     mol = Chem.MolFromSmiles(smiles, sanitize=False)
-    Chem.SanitizeMol(mol, Chem.SanitizeFlags.SANITIZE_ALL ^ Chem.SanitizeFlags.SANITIZE_SETAROMATICITY)
+    Chem.SanitizeMol(
+        mol,
+        Chem.SanitizeFlags.SANITIZE_ALL ^ Chem.SanitizeFlags.SANITIZE_SETAROMATICITY,
+    )
     new_smiles = Chem.MolToSmiles(mol)
 
     print(f'new_smiles = "{new_smiles}"')
-
-
-
-
-
