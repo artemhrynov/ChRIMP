@@ -21,6 +21,35 @@ The dependencies can be easily installed with:
 pip install -r requirements.txt
 ```
 
+## Models
+Models trained during this work can be found as follows:
+```python
+agent.load_model(
+    tokenizer_path="SchwallerGroup/MechSMILES_tokenizer",
+    model_path="SchwallerGroup/chrimp_<architecture>_<task>_<dataset><variant>",
+)
+```
+
+Available model configurations:
+
+| Component      | Options                                                      | Description                                                               |
+|----------------|--------------------------------------------------------------|---------------------------------------------------------------------------|
+| Architecture   | `T5`, `LLaMa`                                                | Model architecture                                                        |
+| Task           | `min_min_1`<br>`equ_equ_n`<br>`equ_min_n`<br>`spe_min_n`     | Elementary steps<br>Equilibrated<br>Rxn w/o by-prod.<br>Rxn w/o stoichio. |
+| Dataset        | `flower`, `mech-uspto-31k`, `pmechdb`                        | Training dataset                                                          |
+| Variant        | (optional)                                                   | Can be left empty, additional details                                     |
+
+[All available models](https://huggingface.co/models?sort=trending&search=SchwallerGroup%2Fchrimp)
+
+**Example:**
+```python
+# Load a T5 model trained on reactions without by-products with the FlowER dataset
+agent.load_model(
+    tokenizer_path="SchwallerGroup/MechSMILES_tokenizer",
+    model_path="SchwallerGroup/chrimp_T5_equ_min_n_flower",
+)
+```
+
 ## Notebooks
 The notebooks of this repository are stored as `.py` files in the `notebooks` directory, and can be directly run as Python scripts.
 However, they are "inflatable" to traditional `.ipynb` using `jupytext`. To convert them, you can run the following command:
