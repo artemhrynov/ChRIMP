@@ -17,25 +17,26 @@ def create_tokenizer():
     with open(VOCAB_PATH) as f:  # keep file order → index
         base_tokens = [tok.rstrip("\n") for tok in f]
 
-    PAD_TOKEN, UNK_TOKEN, BOS_TOKEN, EOS_TOKEN, CLS_TOKEN, SEP_TOKEN = (
+    PAD_TOKEN, UNK_TOKEN, BOS_TOKEN, EOS_TOKEN, CLS_TOKEN, SEP_TOKEN, MASK_TOKEN = (
         "[pad]",
         "[unk]",
         "[bos]",
         "[eos]",
         "[cls]",
         "[sep]",
+        "[mask]",
     )
 
     vocab = {tok: idx for idx, tok in enumerate(base_tokens)}
 
-    SMI_REGEX_PATTERN = r"""(|\[[A-Z][a-z]?|\]|Br?|Cl?|N|O|S|P|F|I|H|b|c|n|o|s|p|\(|\)|\.|=|#|-|\+|\\\\|\/|:|~|@|\?|>|\*|\$|\%[0-9]{2}|[0-9])"""
+    SMI_REGEX_PATTERN = r"""(\[[A-Z][a-z]?|\]|Br?|Cl?|N|O|S|P|F|I|H|b|c|n|o|s|p|\(|\)|\.|=|#|-|\+|\\|/|:|~|@|\?|>|\*|\$|\%[0-9]{2}|[0-9]|\[)"""
 
     model = WordLevel(vocab=vocab, unk_token=UNK_TOKEN)
     tokenizer = Tokenizer(model)
     tokenizer.pre_tokenizer = Sequence(
         [
             WhitespaceSplit(),
-            Split(pattern=Regex(SMI_REGEX_PATTERN), behavior="isolated"),
+            Split(pattern=Regex(SMI_REGEX_PATTERN), behavior="isolated", invert=True),
         ]
     )
 
@@ -52,6 +53,7 @@ def create_tokenizer():
         unk_token=UNK_TOKEN,
         cls_token=CLS_TOKEN,
         sep_token=SEP_TOKEN,
+        mask_token=MASK_TOKEN,
     )
 
     hf_tok.save_pretrained(os.path.join(current_folder, "smiles_tokenizer_folder"))

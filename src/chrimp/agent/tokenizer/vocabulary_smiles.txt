@@ -256,4 +256,5 @@ $
 [pad]
 [eos]
 [sep]
+[mask]
 [unk]

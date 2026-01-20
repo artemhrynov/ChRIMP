@@ -41,6 +41,14 @@
       "special": true
     },
     "258": {
+      "content": "[mask]",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "259": {
       "content": "[unk]",
       "lstrip": false,
       "normalized": false,
@@ -54,6 +62,7 @@
   "cls_token": "[cls]",
   "eos_token": "[eos]",
   "extra_special_tokens": {},
+  "mask_token": "[mask]",
   "model_max_length": 1000000000000000019884624838656,
   "pad_token": "[pad]",
   "sep_token": "[sep]",
