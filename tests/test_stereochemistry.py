@@ -30,3 +30,39 @@ def test_can_smiles_preserves_tetrahedral_chirality():
     assert "@" in ms2.can_smiles
     assert ms1.can_smiles != ms2.can_smiles
 
+
+def test_mapped_smiles_preserves_tetrahedral_chirality():
+    ms1 = MoleculeSet.from_smiles("F[C@:1](Cl)(Br)I")
+    ms2 = MoleculeSet.from_smiles("F[C@@:1](Cl)(Br)I")
+
+    assert "@" in ms1.mapped_smiles
+    assert "@" in ms2.mapped_smiles
+    assert ":1" in ms1.mapped_smiles
+    assert ":1" in ms2.mapped_smiles
+    assert ms1.mapped_smiles != ms2.mapped_smiles
+
+
+def test_can_smiles_preserves_tetrahedral_chirality_with_explicit_hydrogen():
+    ms1 = MoleculeSet.from_smiles("F[C@H](Cl)Br")
+    ms2 = MoleculeSet.from_smiles("F[C@@H](Cl)Br")
+
+    assert "@" in ms1.can_smiles
+    assert "@" in ms2.can_smiles
+    assert ms1.can_smiles != ms2.can_smiles
+
+
+def test_mapped_smiles_preserves_tetrahedral_chirality_with_explicit_hydrogen():
+    ms1 = MoleculeSet.from_smiles("F[C@H:1](Cl)Br")
+    ms2 = MoleculeSet.from_smiles("F[C@@H:1](Cl)Br")
+
+    assert "@" in ms1.mapped_smiles
+    assert "@" in ms2.mapped_smiles
+    assert ":1" in ms1.mapped_smiles
+    assert ":1" in ms2.mapped_smiles
+    assert ms1.mapped_smiles != ms2.mapped_smiles
+
+
+def test_hydrogen_cleanup_preserves_chiral_bracket_hydrogen():
+    ms = MoleculeSet.from_smiles("F[C@H](Cl)Br")
+
+    assert ms.remove_artefact_hydrogens("[C@H](F)(Cl)Br") == "[C@H](F)(Cl)Br"

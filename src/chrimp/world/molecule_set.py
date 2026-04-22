@@ -55,9 +55,8 @@ class ChrimpAtom:
         already_acceptor=False,
         idx: Optional[int] = None,
         smiles_explicit=True,
-        chiral_tag=Chem.rdchem.ChiralType.CHI_UNSPECIFIED, #chirality
-        chiral_neighbors=None, #chirality
-
+        chiral_tag=Chem.rdchem.ChiralType.CHI_UNSPECIFIED, 
+        chiral_neighbors=None, 
     ):
         self.symbol = symbol
         self.atomic_num = ChrimpAtom.symbol_to_atomic_num[symbol]
@@ -69,8 +68,9 @@ class ChrimpAtom:
         self.radical = radical
         self.idx = idx
         self.smiles_explicit = smiles_explicit  # If the atom is explicit or implicit (in the smiles, not in the molecule set)
-        self.chiral_tag = chiral_tag #chirality
-        self.chiral_neighbors = tuple(chiral_neighbors or ()) #chirality
+        self.chiral_tag = chiral_tag #chirality field
+        self.chiral_neighbors = tuple(chiral_neighbors or ()) #neighbouring atom indices that define stereochemical ordering
+
         if bonds is None:
             self.bonds = []
         else:
@@ -82,8 +82,7 @@ class ChrimpAtom:
     def __repr__(self):
         return f"ChrimpAtom({self.repr})"
 
-    #New helpers for chirality 
-
+    #Helper: returns True if the storeg chiral_tag is one of the RDKit's tetrahedral tags: CW or CCW
     @property
     def has_tetrahedral_chirality(self):
         return self.chiral_tag in {
@@ -91,6 +90,7 @@ class ChrimpAtom:
             Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CCW,
         }
 
+    #Helper: removes tetrahedral chirality if needed (resets tag to "unspecified", the stereo neighbour list -- to empty)
     def clear_tetrahedral_chirality(self):
         self.chiral_tag = Chem.rdchem.ChiralType.CHI_UNSPECIFIED
         self.chiral_neighbors = ()
@@ -319,10 +319,15 @@ class MoleculeSet:
         # This function counteracts the addition that sometimes happens of
         # hydrogens that are neither implicit nor explicit but appear in the SMILES
 
-        # This pattern eliminates any hydrogens not alone in square brackets
+        # This pattern eliminates any hydrogens outside square-bracket atom tokens.
         pattern = r"(?<!\[)H\d*"
-        cleaned_smiles = re.sub(pattern, "", smiles)
-        return cleaned_smiles
+        chunks = re.split(r"(\[[^\]]*\])", smiles)
+        return "".join(
+            chunk
+            if chunk.startswith("[") and chunk.endswith("]")
+            else re.sub(pattern, "", chunk)
+            for chunk in chunks
+        )
 
     def put_atoms_in_brackets(self, smiles):
         # Put every atom in bracket, to avoid the apparition of implicit hydrogens
@@ -426,11 +431,7 @@ class MoleculeSet:
 
     @property
     def rdkit_mol(self):
-        mol = Chem.MolFromMolBlock(self.molblock, removeHs=False, sanitize=False)
-        # Since we import with removeHs=False, Hs are explicit and every implicit H is an artifact
-        for a in mol.GetAtoms():
-            a.SetNoImplicit(True)
-        mol.UpdatePropertyCache()
+        mol = self.to_rdkit_mol(include_chirality=True)
         can_ranks = Chem.CanonicalRankAtoms(mol)
         for i, a in enumerate(mol.GetAtoms()):
             a.SetIntProp("canonical_rank", can_ranks[i])
@@ -442,7 +443,7 @@ class MoleculeSet:
         reverse_atom_map_dict = {v: k for k, v in self.atom_map_dict.items()}
         for atom in mapped_mol.GetAtoms():
             atom.SetAtomMapNum(reverse_atom_map_dict.get(atom.GetIdx(), 0))
-        return Chem.MolToSmiles(mapped_mol)
+        return Chem.MolToSmiles(mapped_mol, isomericSmiles=True)
 
     @property
     def molblock(self):
@@ -456,7 +457,8 @@ class MoleculeSet:
         # If a '*' is in the smiles, we remove it
         if "*" in smiles:
             smiles = smiles.replace("*", "")
-
+        
+        # Build an RDKit molecule from SMILES
         rdkit_mol = Chem.MolFromSmiles(smiles, sanitize=False)
         # Kekulize the molecule and add hydrogens
         Chem.Kekulize(rdkit_mol, clearAromaticFlags=True)
@@ -468,19 +470,22 @@ class MoleculeSet:
             # if atom doesn't have the smiles_explicit property, we set it to 0
             if not atom.HasProp("smiles_explicit"):
                 atom.SetProp("smiles_explicit", "0")
-        Chem.AssignStereochemistry(rdkit_mol, force=True, cleanIt=True) #chiral shit
+        Chem.AssignStereochemistry(rdkit_mol, force=True, cleanIt=True) # assign stereochemical information
 
         already_seen_idx = []
-        atoms_list = {}
-        connections_list = []
-        bonds_list = []
+        atoms_list = {} # maps RDKit atim index -> ChrimpAtom <=> storage for converted atoms
+        connections_list = [] # stores connections as an intermediate before ChrimpBond objects are created
+        bonds_list = [] # will eventually contain the ChrimpBond objects
         atom_idx = 0
         atom_map_dict = {}
+
         for a in rdkit_mol.GetAtoms():
             if a.GetAtomMapNum() != 0:
                 atom_map_dict[a.GetAtomMapNum()] = a.GetIdx()
-            chiral_tag = a.GetChiralTag()
 
+            chiral_tag = a.GetChiralTag() # captures chirality information from parsed SMILES
+
+            #if atoms is tetrahedral -> store its neighbours
             if chiral_tag in {
                 Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW,
                 Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CCW,
@@ -489,14 +494,14 @@ class MoleculeSet:
             else:
                 chiral_neighbors = ()
             
-
+            # For each RDKit atom a ChrimpAtom is built and stored in atoms_list
             atoms_list[a.GetIdx()] = ChrimpAtom(
                 a.GetSymbol(),
                 a.GetFormalCharge(),
                 idx=atom_idx,
                 smiles_explicit=a.GetProp("smiles_explicit") == "1",
-                chiral_tag=chiral_tag, #chiral
-                chiral_neighbors=chiral_neighbors, #chiral
+                chiral_tag=chiral_tag, # Stores RDKit chirality tag inside ChrimpAtom
+                chiral_neighbors=chiral_neighbors, # Stores stereo-defining neighbor indices
 
             )
             atom_idx += 1
