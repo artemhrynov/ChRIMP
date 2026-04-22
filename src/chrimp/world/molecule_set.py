@@ -345,12 +345,13 @@ class MoleculeSet:
             return Chem.MolToSmiles(
                 Chem.MolFromSmiles(smiles, sanitize=sanitize),
                 kekuleSmiles=MoleculeSet.default_kekulize,
-                isomericSmiles=True,
+                isomericSmiles=True, # now preserves stereochemical markers
             )
         except:  # noqa: E722 (Do not use bare except)
             # print(f"Could not canonicalize {smiles}")
             return smiles
 
+    #Helper: flips the tetrahedral orientation when needed
     @staticmethod
     def flip_chiral_tag(chiral_tag):
         if chiral_tag == Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW:
@@ -359,6 +360,7 @@ class MoleculeSet:
             return Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW
         return chiral_tag
 
+    #Helper: computes whether neighbor change is an odd permutation (achieved by an odd number of operations)
     @staticmethod
     def permutation_is_odd(original_order, current_order):
         positions = [original_order.index(idx) for idx in current_order]
@@ -379,14 +381,17 @@ class MoleculeSet:
         }
         return bond_types[int(typebondint)]
 
+    #Helper: ChrimpAtom -> RDKit atom
     def to_rdkit_mol(self, include_chirality=True):
-        rw_mol = Chem.RWMol()
+        rw_mol = Chem.RWMol() #creates a read-write RDKit molecule
+        # Goes through every ChrimpAtom in MoleculeSet
         for atom in self.atoms:
             rd_atom = Chem.Atom(atom.symbol)
             rd_atom.SetFormalCharge(atom.charge)
             rd_atom.SetNoImplicit(True)
             rw_mol.AddAtom(rd_atom)
 
+        # Goes through every ChrimpBond in MoleculeSet
         for bond in self.bonds:
             rw_mol.AddBond(
                 bond.atom1.idx,
@@ -394,16 +399,17 @@ class MoleculeSet:
                 self.rdkit_bond_type(bond.typebondint),
             )
 
-        mol = rw_mol.GetMol()
+        mol = rw_mol.GetMol() # converts the editable molecule into a normal RDKit molecule
 
         if include_chirality:
+            # loop through ChrimpAtom
             for atom in self.atoms:
                 if not atom.has_tetrahedral_chirality:
                     continue
 
                 rd_atom = mol.GetAtomWithIdx(atom.idx)
                 current_neighbors = tuple(n.GetIdx() for n in rd_atom.GetNeighbors())
-                if set(current_neighbors) != set(atom.chiral_neighbors):
+                if set(current_neighbors) != set(atom.chiral_neighbors): # CHECK THIS PART VERY CAREFULLY
                     continue
 
                 chiral_tag = atom.chiral_tag
