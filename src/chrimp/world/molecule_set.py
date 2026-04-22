@@ -55,6 +55,9 @@ class ChrimpAtom:
         already_acceptor=False,
         idx: Optional[int] = None,
         smiles_explicit=True,
+        chiral_tag=Chem.rdchem.ChiralType.CHI_UNSPECIFIED, #chirality
+        chiral_neighbors=None, #chirality
+
     ):
         self.symbol = symbol
         self.atomic_num = ChrimpAtom.symbol_to_atomic_num[symbol]
@@ -66,6 +69,8 @@ class ChrimpAtom:
         self.radical = radical
         self.idx = idx
         self.smiles_explicit = smiles_explicit  # If the atom is explicit or implicit (in the smiles, not in the molecule set)
+        self.chiral_tag = chiral_tag #chirality
+        self.chiral_neighbors = tuple(chiral_neighbors or ()) #chirality
         if bonds is None:
             self.bonds = []
         else:
@@ -76,6 +81,20 @@ class ChrimpAtom:
 
     def __repr__(self):
         return f"ChrimpAtom({self.repr})"
+
+    #New helpers for chirality 
+
+    @property
+    def has_tetrahedral_chirality(self):
+        return self.chiral_tag in {
+            Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW,
+            Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CCW,
+        }
+
+    def clear_tetrahedral_chirality(self):
+        self.chiral_tag = Chem.rdchem.ChiralType.CHI_UNSPECIFIED
+        self.chiral_neighbors = ()
+
 
     @property
     def repr(self):
@@ -321,17 +340,82 @@ class MoleculeSet:
             return Chem.MolToSmiles(
                 Chem.MolFromSmiles(smiles, sanitize=sanitize),
                 kekuleSmiles=MoleculeSet.default_kekulize,
+                isomericSmiles=True,
             )
         except:  # noqa: E722 (Do not use bare except)
             # print(f"Could not canonicalize {smiles}")
             return smiles
 
+    @staticmethod
+    def flip_chiral_tag(chiral_tag):
+        if chiral_tag == Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW:
+            return Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CCW
+        if chiral_tag == Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CCW:
+            return Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW
+        return chiral_tag
+
+    @staticmethod
+    def permutation_is_odd(original_order, current_order):
+        positions = [original_order.index(idx) for idx in current_order]
+        inversions = 0
+        for i in range(len(positions)):
+            for j in range(i + 1, len(positions)):
+                if positions[i] > positions[j]:
+                    inversions += 1
+        return inversions % 2 == 1
+
+    @staticmethod
+    def rdkit_bond_type(typebondint):
+        bond_types = {
+            1: Chem.rdchem.BondType.SINGLE,
+            2: Chem.rdchem.BondType.DOUBLE,
+            3: Chem.rdchem.BondType.TRIPLE,
+            4: Chem.rdchem.BondType.QUADRUPLE,
+        }
+        return bond_types[int(typebondint)]
+
+    def to_rdkit_mol(self, include_chirality=True):
+        rw_mol = Chem.RWMol()
+        for atom in self.atoms:
+            rd_atom = Chem.Atom(atom.symbol)
+            rd_atom.SetFormalCharge(atom.charge)
+            rd_atom.SetNoImplicit(True)
+            rw_mol.AddAtom(rd_atom)
+
+        for bond in self.bonds:
+            rw_mol.AddBond(
+                bond.atom1.idx,
+                bond.atom2.idx,
+                self.rdkit_bond_type(bond.typebondint),
+            )
+
+        mol = rw_mol.GetMol()
+
+        if include_chirality:
+            for atom in self.atoms:
+                if not atom.has_tetrahedral_chirality:
+                    continue
+
+                rd_atom = mol.GetAtomWithIdx(atom.idx)
+                current_neighbors = tuple(n.GetIdx() for n in rd_atom.GetNeighbors())
+                if set(current_neighbors) != set(atom.chiral_neighbors):
+                    continue
+
+                chiral_tag = atom.chiral_tag
+                if self.permutation_is_odd(atom.chiral_neighbors, current_neighbors):
+                    chiral_tag = self.flip_chiral_tag(chiral_tag)
+                rd_atom.SetChiralTag(chiral_tag)
+
+        mol.UpdatePropertyCache(strict=False)
+        Chem.AssignStereochemistry(mol, force=True, cleanIt=False)
+        return mol
+
     @property
     def can_smiles(self):
         if self.can_smiles_ is None:
-            mol = Chem.MolFromMolBlock(self.molblock, removeHs=False, sanitize=False)
+            mol = self.to_rdkit_mol(include_chirality=True)
             Chem.Kekulize(mol, clearAromaticFlags=True)
-            h_can_smiles_ = Chem.MolToSmiles(mol)
+            h_can_smiles_ = Chem.MolToSmiles(mol, isomericSmiles=True)
             self.can_smiles_ = self.clean_smiles_artefacts(h_can_smiles_)
             if MoleculeSet.default_hydrogens_implicit:
                 self.can_smiles_ = self.rdkit_canonicalization(
@@ -384,6 +468,7 @@ class MoleculeSet:
             # if atom doesn't have the smiles_explicit property, we set it to 0
             if not atom.HasProp("smiles_explicit"):
                 atom.SetProp("smiles_explicit", "0")
+        Chem.AssignStereochemistry(rdkit_mol, force=True, cleanIt=True) #chiral shit
 
         already_seen_idx = []
         atoms_list = {}
@@ -394,11 +479,25 @@ class MoleculeSet:
         for a in rdkit_mol.GetAtoms():
             if a.GetAtomMapNum() != 0:
                 atom_map_dict[a.GetAtomMapNum()] = a.GetIdx()
+            chiral_tag = a.GetChiralTag()
+
+            if chiral_tag in {
+                Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW,
+                Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CCW,
+            }:
+                chiral_neighbors = tuple(n.GetIdx() for n in a.GetNeighbors())
+            else:
+                chiral_neighbors = ()
+            
+
             atoms_list[a.GetIdx()] = ChrimpAtom(
                 a.GetSymbol(),
                 a.GetFormalCharge(),
                 idx=atom_idx,
                 smiles_explicit=a.GetProp("smiles_explicit") == "1",
+                chiral_tag=chiral_tag, #chiral
+                chiral_neighbors=chiral_neighbors, #chiral
+
             )
             atom_idx += 1
             already_seen_idx.append(a.GetIdx())
@@ -414,7 +513,7 @@ class MoleculeSet:
         return cls(
             list(atoms_list.values()),
             bonds_list,
-            chiral=("@" in smiles),
+            chiral=any(atom.has_tetrahedral_chirality for atom in atoms_list.values()),
             atom_map_dict=atom_map_dict,
         )
 
