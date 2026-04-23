@@ -372,6 +372,42 @@ class MoleculeSet:
         return inversions % 2 == 1
 
     @staticmethod
+    def remap_chiral_neighbors_after_replacement(original_order, current_order):
+        original_order = tuple(original_order)
+        current_order = tuple(current_order)
+
+        if len(original_order) != 4 or len(current_order) != 4:
+            return None
+
+        original_set = set(original_order)
+        current_set = set(current_order)
+
+        if original_set == current_set:
+            return original_order
+
+        removed_neighbors = tuple(original_set - current_set)
+        added_neighbors = tuple(current_set - original_set)
+        if len(removed_neighbors) != 1 or len(added_neighbors) != 1:
+            return None
+
+        remapped_order = list(original_order)
+        remapped_order[remapped_order.index(removed_neighbors[0])] = added_neighbors[0]
+        return tuple(remapped_order)
+
+    @staticmethod
+    def potential_tetrahedral_chiral_atom_indices(mol):
+        probe_mol = Chem.Mol(mol)
+        for atom in probe_mol.GetAtoms():
+            atom.SetChiralTag(Chem.rdchem.ChiralType.CHI_UNSPECIFIED)
+        probe_mol.UpdatePropertyCache(strict=False)
+        return {
+            atom_idx
+            for atom_idx, _ in Chem.FindMolChiralCenters(
+                probe_mol, includeUnassigned=True, includeCIP=False
+            )
+        }
+
+    @staticmethod
     def rdkit_bond_type(typebondint):
         bond_types = {
             1: Chem.rdchem.BondType.SINGLE,
@@ -400,24 +436,33 @@ class MoleculeSet:
             )
 
         mol = rw_mol.GetMol() # converts the editable molecule into a normal RDKit molecule
+        mol.UpdatePropertyCache(strict=False)
 
         if include_chirality:
+            chiral_atoms = [atom for atom in self.atoms if atom.has_tetrahedral_chirality]
+            potential_chiral_atom_indices = (
+                self.potential_tetrahedral_chiral_atom_indices(mol)
+                if chiral_atoms
+                else set()
+            )
             # loop through ChrimpAtom
-            for atom in self.atoms:
-                if not atom.has_tetrahedral_chirality:
+            for atom in chiral_atoms:
+                rd_atom = mol.GetAtomWithIdx(atom.idx)
+                if atom.idx not in potential_chiral_atom_indices:
                     continue
 
-                rd_atom = mol.GetAtomWithIdx(atom.idx)
                 current_neighbors = tuple(n.GetIdx() for n in rd_atom.GetNeighbors())
-                if set(current_neighbors) != set(atom.chiral_neighbors): # CHECK THIS PART VERY CAREFULLY
+                chiral_neighbors = self.remap_chiral_neighbors_after_replacement(
+                    atom.chiral_neighbors, current_neighbors
+                )
+                if chiral_neighbors is None:
                     continue
 
                 chiral_tag = atom.chiral_tag
-                if self.permutation_is_odd(atom.chiral_neighbors, current_neighbors):
+                if self.permutation_is_odd(chiral_neighbors, current_neighbors):
                     chiral_tag = self.flip_chiral_tag(chiral_tag)
                 rd_atom.SetChiralTag(chiral_tag)
 
-        mol.UpdatePropertyCache(strict=False)
         Chem.AssignStereochemistry(mol, force=True, cleanIt=False)
         return mol
 
