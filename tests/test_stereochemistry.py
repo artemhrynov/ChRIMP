@@ -1,8 +1,29 @@
-from chrimp.world.molecule_set import MoleculeSet
+from chrimp.world.molecule_set import ChrimpAtom, ChrimpBond, MoleculeSet
 
 
 def get_tetrahedral_atoms(ms):
     return [a for a in ms.atoms if a.has_tetrahedral_chirality]
+
+
+def replace_ligand(ms, center_idx, old_ligand_idx, new_symbol):
+    product = ms.copy()
+    center = product.atoms[center_idx]
+    old_ligand = product.atoms[old_ligand_idx]
+    old_bond = next(
+        bond
+        for bond in center.bonds
+        if bond.atom1 is old_ligand or bond.atom2 is old_ligand
+    )
+
+    product.bonds.remove(old_bond)
+    old_bond.atom1.bonds.remove(old_bond)
+    old_bond.atom2.bonds.remove(old_bond)
+
+    new_ligand = ChrimpAtom(new_symbol, 0, idx=len(product.atoms))
+    product.atoms.append(new_ligand)
+    product.bonds.append(ChrimpBond(center, new_ligand, 1))
+    product.surounding_electrons_calc()
+    return product
 
 
 def test_from_smiles_distinguishes_at_and_atat():
@@ -66,3 +87,18 @@ def test_hydrogen_cleanup_preserves_chiral_bracket_hydrogen():
     ms = MoleculeSet.from_smiles("F[C@H](Cl)Br")
 
     assert ms.remove_artefact_hydrogens("[C@H](F)(Cl)Br") == "[C@H](F)(Cl)Br"
+
+
+def test_to_rdkit_mol_preserves_chiral_center_after_ligand_replacement():
+    ms1 = replace_ligand(MoleculeSet.from_smiles("F[C@](Cl)(Br)I"), 1, 0, "H")
+    ms2 = replace_ligand(MoleculeSet.from_smiles("F[C@@](Cl)(Br)I"), 1, 0, "H")
+
+    assert "@" in ms1.can_smiles
+    assert "@" in ms2.can_smiles
+    assert ms1.can_smiles != ms2.can_smiles
+
+
+def test_to_rdkit_mol_drops_chirality_after_replacement_with_duplicate_ligand():
+    ms = replace_ligand(MoleculeSet.from_smiles("F[C@](Cl)(Br)I"), 1, 0, "Cl")
+
+    assert "@" not in ms.can_smiles
