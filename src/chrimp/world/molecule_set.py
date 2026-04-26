@@ -371,13 +371,26 @@ class MoleculeSet:
                     inversions += 1
         return inversions % 2 == 1
 
+    #Helper: treats new ligands on the atom
     @staticmethod
-    def remap_chiral_neighbors_after_replacement(original_order, current_order):
+    def remap_chiral_neighbors_after_replacement(
+        original_order, current_order, ligand_replacements=None
+    ):
         original_order = tuple(original_order)
         current_order = tuple(current_order)
 
         if len(original_order) != 4 or len(current_order) != 4:
             return None
+
+        if ligand_replacements:
+            remapped_order = tuple(
+                ligand_replacements.get(idx, idx) for idx in original_order
+            )
+            if len(set(remapped_order)) != 4:
+                return None
+            if set(remapped_order) != set(current_order):
+                return None
+            return remapped_order
 
         original_set = set(original_order)
         current_set = set(current_order)
@@ -394,6 +407,59 @@ class MoleculeSet:
         remapped_order[remapped_order.index(removed_neighbors[0])] = added_neighbors[0]
         return tuple(remapped_order)
 
+    def update_tetrahedral_chirality(
+        self, center_idx, ligand_replacements=None, stereo_mode="retain"
+    ):
+        """Update a tetrahedral stereo frame after one or more ligand changes."""
+        valid_stereo_modes = {"retain", "invert", "unknown", "clear"}
+        if stereo_mode not in valid_stereo_modes:
+            raise ValueError(
+                f"stereo_mode must be one of {sorted(valid_stereo_modes)}, "
+                f"got {stereo_mode!r}"
+            )
+
+        center = self.atoms[center_idx]
+        if not center.has_tetrahedral_chirality:
+            return False
+
+        self.molblock_ = None
+        self.can_smiles_ = None
+        self.repr_ = None
+
+        if stereo_mode in {"unknown", "clear"}:
+            center.clear_tetrahedral_chirality()
+            self.chiral = any(atom.has_tetrahedral_chirality for atom in self.atoms)
+            return False
+
+        ligand_replacements = dict(ligand_replacements or {})
+        mol = self.to_rdkit_mol(include_chirality=False)
+        current_neighbors = tuple(
+            atom.GetIdx() for atom in mol.GetAtomWithIdx(center.idx).GetNeighbors()
+        )
+
+        if center.idx not in self.potential_tetrahedral_chiral_atom_indices(mol):
+            center.clear_tetrahedral_chirality()
+            self.chiral = any(atom.has_tetrahedral_chirality for atom in self.atoms)
+            return False
+
+        chiral_neighbors = self.remap_chiral_neighbors_after_replacement(
+            center.chiral_neighbors,
+            current_neighbors,
+            ligand_replacements=ligand_replacements,
+        )
+        if chiral_neighbors is None:
+            center.clear_tetrahedral_chirality()
+            self.chiral = any(atom.has_tetrahedral_chirality for atom in self.atoms)
+            return False
+
+        center.chiral_neighbors = chiral_neighbors
+        if stereo_mode == "invert":
+            center.chiral_tag = self.flip_chiral_tag(center.chiral_tag)
+
+        self.chiral = any(atom.has_tetrahedral_chirality for atom in self.atoms)
+        return True
+
+    #Helper: Returns possible tetrahedral stereocenters after clearing chiral tags.
     @staticmethod
     def potential_tetrahedral_chiral_atom_indices(mol):
         probe_mol = Chem.Mol(mol)
