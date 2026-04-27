@@ -27,7 +27,12 @@ def replace_ligand(ms, center_idx, old_ligand_idx, new_symbol):
 
 
 def replace_ligands(
-    ms, center_idx, replacements, stereo_mode="retain", update_chirality=True
+    ms,
+    center_idx,
+    replacements,
+    stereo_mode="retain",
+    update_chirality=True,
+    return_replacement_map=False,
 ):
     product = ms.copy()
     replacement_map = {}
@@ -52,9 +57,16 @@ def replace_ligands(
 
     if update_chirality:
         product.update_tetrahedral_chirality(
-            center_idx, replacement_map, stereo_mode=stereo_mode
+            center_idx,
+            ligand_replacements=replacement_map,
+            stereo_mode=stereo_mode,
         )
+
     product.surounding_electrons_calc()
+
+    if return_replacement_map:
+        return product, replacement_map
+
     return product
 
 
@@ -181,3 +193,87 @@ def test_drops_chirality_after_multiple_replacements_with_duplicate_ligands():
 
     assert "@" not in ms.can_smiles
     assert get_tetrahedral_atoms(ms) == []
+
+
+def test_update_tetrahedral_chirality_handles_all_four_ligand_replacements_with_mapping():
+    product, replacement_map = replace_ligands(
+        MoleculeSet.from_smiles("F[C@](Cl)(Br)I"),
+        1,
+        [
+            (0, "Cl"),  # old F  -> new Cl
+            (2, "Br"),  # old Cl -> new Br
+            (3, "I"),   # old Br -> new I
+            (4, "F"),   # old I  -> new F
+        ],
+        update_chirality=False,
+        return_replacement_map=True,
+    )
+
+    assert set(replacement_map.keys()) == {0, 2, 3, 4}
+    assert len(set(replacement_map.values())) == 4
+
+    result = product.update_tetrahedral_chirality(
+        1,
+        ligand_replacements=replacement_map,
+        stereo_mode="retain",
+    )
+
+    assert result is True
+    assert "@" in product.can_smiles
+
+    stereo_atoms = get_tetrahedral_atoms(product)
+    assert len(stereo_atoms) == 1
+    assert set(stereo_atoms[0].chiral_neighbors) == set(replacement_map.values())
+
+
+def test_update_tetrahedral_chirality_drops_all_four_ligand_replacements_without_mapping():
+    product = replace_ligands(
+        MoleculeSet.from_smiles("F[C@](Cl)(Br)I"),
+        1,
+        [
+            (0, "Cl"),
+            (2, "Br"),
+            (3, "I"),
+            (4, "F"),
+        ],
+        update_chirality=False,
+    )
+
+    result = product.update_tetrahedral_chirality(
+        1,
+        stereo_mode="retain",
+    )
+
+    assert result is False
+    assert "@" not in product.can_smiles
+    assert get_tetrahedral_atoms(product) == []
+
+
+def test_update_tetrahedral_chirality_can_invert_after_all_four_ligand_replacements():
+    retained = replace_ligands(
+        MoleculeSet.from_smiles("F[C@](Cl)(Br)I"),
+        1,
+        [
+            (0, "Cl"),
+            (2, "Br"),
+            (3, "I"),
+            (4, "F"),
+        ],
+        stereo_mode="retain",
+    )
+
+    inverted = replace_ligands(
+        MoleculeSet.from_smiles("F[C@](Cl)(Br)I"),
+        1,
+        [
+            (0, "Cl"),
+            (2, "Br"),
+            (3, "I"),
+            (4, "F"),
+        ],
+        stereo_mode="invert",
+    )
+
+    assert "@" in retained.can_smiles
+    assert "@" in inverted.can_smiles
+    assert retained.can_smiles != inverted.can_smiles
