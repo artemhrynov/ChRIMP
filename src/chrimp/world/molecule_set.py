@@ -418,9 +418,9 @@ class MoleculeSet:
                 f"got {stereo_mode!r}"
             )
 
-        center = self.atoms[center_idx]
+        center = self.atoms[center_idx] 
         if not center.has_tetrahedral_chirality:
-            return False
+            return False # this means that the function cannot yet support newly created stereocentres
 
         self.molblock_ = None
         self.can_smiles_ = None
@@ -428,11 +428,11 @@ class MoleculeSet:
 
         if stereo_mode in {"unknown", "clear"}:
             center.clear_tetrahedral_chirality()
-            self.chiral = any(atom.has_tetrahedral_chirality for atom in self.atoms)
+            self.chiral = any(atom.has_tetrahedral_chirality for atom in self.atoms) # after you potentially cleaned this atom, is the molecule still chiral
             return False
 
         ligand_replacements = dict(ligand_replacements or {})
-        mol = self.to_rdkit_mol(include_chirality=False)
+        mol = self.to_rdkit_mol(include_chirality=False) #rebuilds rdkit molecule, without considering stored chirality
         current_neighbors = tuple(
             atom.GetIdx() for atom in mol.GetAtomWithIdx(center.idx).GetNeighbors()
         )
@@ -442,15 +442,17 @@ class MoleculeSet:
             self.chiral = any(atom.has_tetrahedral_chirality for atom in self.atoms)
             return False
 
+        #remap old stereo ligand frame to match the new molecule? 
         chiral_neighbors = self.remap_chiral_neighbors_after_replacement(
             center.chiral_neighbors,
             current_neighbors,
             ligand_replacements=ligand_replacements,
-        )
+        ) #center.chiral_neighbors -> old stored order of ligands around the stereocenter
+          #current_neigbors -> new actual set of ligands after the molecule has changed
         if chiral_neighbors is None:
             center.clear_tetrahedral_chirality()
             self.chiral = any(atom.has_tetrahedral_chirality for atom in self.atoms)
-            return False
+            return False #still does not work for multiple ligand change?
 
         center.chiral_neighbors = chiral_neighbors
         if stereo_mode == "invert":
