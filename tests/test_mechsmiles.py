@@ -69,6 +69,50 @@ class TestMechSmiles:
         post_csts = count_atoms(msmi)
         assert prior_csts == post_csts, f"Constants changed for: {init_string}"
 
+    def test_process_smiles_arrow_supports_stereo_annotated_attack(self):
+        msmi = MechSmiles("[Cl:1][P@:2]([F:3])([Br:4])[I:5]|(1, 2, 'invert')")
+
+        assert msmi.process_smiles_arrow("(1, 2, 'invert')", msmi.ms.atom_map_dict) == (
+            "a",
+            0,
+            1,
+            "invert",
+        )
+
+    def test_process_smiles_arrow_supports_stereo_annotated_bond_attack(self):
+        msmi = MechSmiles("[CH2:1]=[CH:2][P@:3]([F:4])([Cl:5])[Br:6]|((1, 2), 3, 'invert')")
+
+        assert msmi.process_smiles_arrow(
+            "((1, 2), 3, 'invert')", msmi.ms.atom_map_dict
+        ) == ("ba", 0, 1, 2, "invert")
+
+    def test_stereo_annotated_mechsmiles_product_preserves_chirality(self):
+        msmi = MechSmiles("[Cl:1][P@:2]([F:3])([Br:4])[I:5]|(1, 2, 'invert')")
+
+        assert "@" in msmi.prod
+
+    def test_stereo_annotated_mechsmiles_standardize_is_stable(self):
+        msmi = MechSmiles("[Cl:1][P@:2]([F:3])([Br:4])[I:5]|(1, 2, 'invert')")
+
+        msmi.standardize()
+        first_std = msmi.value
+        msmi.standardize()
+        second_std = msmi.value
+
+        assert first_std == second_std
+        assert "'invert'" in first_std
+
+    def test_legacy_mechsmiles_product_clears_chirality_on_chiral_acceptor(self):
+        msmi = MechSmiles("[Cl:1][P@:2]([F:3])([Br:4])[I:5]|(1, 2)")
+
+        assert "@" not in msmi.prod
+
+    def test_move_mechsmiles_preserves_stereo_annotation_in_arrow_string(self):
+        ms = MechSmiles("[Cl:1][P@:2]([F:3])([Br:4])[I:5]|").ms
+        mechsmiles = ms.move_mechsmiles([("a", 2, 1, "invert")])
+
+        assert "'invert'" in mechsmiles
+
 
 # Tests I used to run by hand:
 # verbose_tests = True

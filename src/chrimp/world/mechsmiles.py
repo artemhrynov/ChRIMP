@@ -6,7 +6,11 @@ from collections import Counter
 from chrimp.world.utils import quick_canonicalize
 from chrimp.visualization.arrows_on_mols import filter_hydrogens
 from chrimp.world.molecule_set import MoleculeSet, RadicalAtomException
-from chrimp.visualization.mechsmiles_visualizer import MechSmilesVisualizer
+
+try:
+    from chrimp.visualization.mechsmiles_visualizer import MechSmilesVisualizer
+except ModuleNotFoundError:
+    MechSmilesVisualizer = None
 
 
 class NotInitiatingAttackError(Exception):
@@ -50,10 +54,42 @@ class MechSmiles:
     "C[C:3](=[O:4])C.[NaH3-:1][H:2]|((1,2),3);((3,4), 4)"
     """
 
-    visualizer = MechSmilesVisualizer()
+    visualizer = MechSmilesVisualizer() if MechSmilesVisualizer is not None else None
     warning_dummy_already_printed = False
 
     default_hide_observers = False
+
+    @staticmethod
+    def parse_arrow_tuple(arrow_smiles):
+        if isinstance(arrow_smiles, str):
+            arrow_smiles = re.sub(r"hv", r'"hv"', arrow_smiles)
+            return eval(arrow_smiles)
+        raise ValueError(
+            f"Arrow must be a string, instead is: {type(arrow_smiles)} with value {arrow_smiles}"
+        )
+
+    @staticmethod
+    def collect_arrow_indices(tup):
+        if isinstance(tup, int):
+            return {str(tup)}
+        if isinstance(tup, tuple):
+            indices = set()
+            for item in tup:
+                indices.update(MechSmiles.collect_arrow_indices(item))
+            return indices
+        return set()
+
+    @staticmethod
+    def remap_arrow_tuple(tup, reactive_indices_dict):
+        if isinstance(tup, int):
+            return int(reactive_indices_dict[str(tup)])
+        if isinstance(tup, str):
+            return tup
+        if isinstance(tup, tuple):
+            return tuple(
+                MechSmiles.remap_arrow_tuple(i, reactive_indices_dict) for i in tup
+            )
+        return tup
 
     def __init__(
         self,
@@ -75,6 +111,8 @@ class MechSmiles:
             raise MechSmilesInitError(f"Invalid smiles {self.smiles}")
         if conds is None:
             self.conds = [].copy()  # List of SMILES
+        else:
+            self.conds = conds.copy()
         self.context = context
 
         if context is not None:
@@ -117,15 +155,31 @@ class MechSmiles:
         self._ms_prod = None
 
     def show_reac(self, **kwargs):
+        if MechSmiles.visualizer is None:
+            raise ModuleNotFoundError(
+                "Visualization dependencies are not installed for MechSmiles."
+            )
         return MechSmiles.visualizer.show_reac(self, **kwargs)
 
     def show_prod(self, **kwargs):
+        if MechSmiles.visualizer is None:
+            raise ModuleNotFoundError(
+                "Visualization dependencies are not installed for MechSmiles."
+            )
         return MechSmiles.visualizer.show_prod(self, **kwargs)
 
     def show_cond(self, **kwargs):
+        if MechSmiles.visualizer is None:
+            raise ModuleNotFoundError(
+                "Visualization dependencies are not installed for MechSmiles."
+            )
         return MechSmiles.visualizer.show_cond(self, **kwargs)
 
     def show(self, **kwargs):
+        if MechSmiles.visualizer is None:
+            raise ModuleNotFoundError(
+                "Visualization dependencies are not installed for MechSmiles."
+            )
         return MechSmiles.visualizer.show(self, **kwargs)
 
     def hide_cond(self, unmap_non_reactive_atoms=True):
@@ -207,10 +261,7 @@ class MechSmiles:
         """
         reactive_indices = set()
         for arrow in self.smiles_arrows:
-            reactive_indices_arrow = [
-                part.strip() for part in re.split(r"[(),]", arrow) if part
-            ]
-            reactive_indices.update(reactive_indices_arrow)
+            reactive_indices.update(self.collect_arrow_indices(self.parse_arrow_tuple(arrow)))
 
         # get all indices in SMILES
         indices_smiles = set(re.findall(r":(\d+)]", self.smiles))
@@ -248,16 +299,10 @@ class MechSmiles:
             for i, _ in enumerate(reactive_indices)
         }
 
-        def remap_tuple(tup, reactive_indices_dict):
-            if isinstance(tup, int):
-                return int(reactive_indices_dict[str(tup)])
-            elif isinstance(tup, tuple):
-                return tuple(remap_tuple(i, reactive_indices_dict) for i in tup)
-
         final_smiles = self.smiles
 
         tmp_smiles_arrows = [
-            str(remap_tuple(eval(tup_str), dict_remap_1))
+            str(self.remap_arrow_tuple(self.parse_arrow_tuple(tup_str), dict_remap_1))
             for tup_str in self.smiles_arrows
         ]
         for old_idx, new_idx in dict_remap_1.items():
@@ -266,7 +311,7 @@ class MechSmiles:
         all_arrows_string = ";".join(
             str(x)
             for x in [
-                remap_tuple(eval(tup_str), dict_remap_2)
+                self.remap_arrow_tuple(self.parse_arrow_tuple(tup_str), dict_remap_2)
                 for tup_str in tmp_smiles_arrows
             ]
         )
@@ -320,21 +365,26 @@ class MechSmiles:
         return self._ms_prod
 
     def process_smiles_arrow(self, arrow_smiles, atom_map_dict):
-        # text has either a form of (a, b), ((a, b), b), ((a, b), c), or (hv, (a, b))
-        # safe_eval
-        if isinstance(arrow_smiles, str):
-            arrow_smiles = re.sub(r"hv", r'"hv"', arrow_smiles)
-            tup = eval(arrow_smiles)
-        else:
-            raise ValueError(
-                f"Arrow must be a string, instead is: {type(arrow_smiles)} with value {arrow_smiles}"
-            )
+        # text has either a form of (a, b), (a, b, "retain"), ((a, b), b),
+        # ((a, b), c), ((a, b), c, "invert"), or (hv, (a, b))
+        tup = self.parse_arrow_tuple(arrow_smiles)
 
         if not isinstance(tup, tuple):
             return ()
 
         if isinstance(tup[0], int):  # attack move
-            return ("a", atom_map_dict[tup[0]], atom_map_dict[tup[1]])
+            if len(tup) == 2:
+                return ("a", atom_map_dict[tup[0]], atom_map_dict[tup[1]])
+            if len(tup) == 3 and isinstance(tup[2], str):
+                return (
+                    "a",
+                    atom_map_dict[tup[0]],
+                    atom_map_dict[tup[1]],
+                    tup[2],
+                )
+            raise ValueError(
+                "Attack move must have format (a, b) or (a, b, 'retain'|'invert'|'clear'|'unknown')"
+            )
 
         elif isinstance(tup[0], tuple):
             # If tup[0][1] == tup[1], it's a ionization move
@@ -343,16 +393,27 @@ class MechSmiles:
                     "Move must either have a format (a, b), ((a, b), c) or (hv, (a, b))"
                 )
 
-            if tup[0][1] == tup[1]:
+            if len(tup) == 2 and tup[0][1] == tup[1]:
                 return ("i", atom_map_dict[tup[0][0]], atom_map_dict[tup[0][1]])
 
-            else:
+            if len(tup) == 2:
                 return (
                     "ba",
                     atom_map_dict[tup[0][0]],
                     atom_map_dict[tup[0][1]],
                     atom_map_dict[tup[1]],
                 )
+            if len(tup) == 3 and isinstance(tup[2], str):
+                return (
+                    "ba",
+                    atom_map_dict[tup[0][0]],
+                    atom_map_dict[tup[0][1]],
+                    atom_map_dict[tup[1]],
+                    tup[2],
+                )
+            raise ValueError(
+                "Bond-attack move must have format ((a, b), c) or ((a, b), c, 'retain'|'invert'|'clear'|'unknown')"
+            )
 
         elif isinstance(tup[0], str) and tup[0] == "hv":
             return ("hv", atom_map_dict[tup[1][0]], atom_map_dict[tup[1][1]])

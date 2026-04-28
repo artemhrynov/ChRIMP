@@ -280,6 +280,7 @@ class MoleculeSet:
     default_treat_Br_I_2nd_period = False  # bool
     default_treat_P_S_Cl_12_electrons = True  # bool
     default_authorize_radicals = True  # bool
+    attack_stereo_modes = {"retain", "invert", "unknown", "clear"}
 
     def __init__(
         self, atoms, bonds, chiral: Optional[bool] = None, atom_map_dict: dict = {}
@@ -485,6 +486,63 @@ class MoleculeSet:
         }
         return bond_types[int(typebondint)]
 
+    @classmethod
+    def parse_attack_stereo_mode(cls, move, expected_kind):
+        base_len = 3 if expected_kind == "a" else 4
+        if move[0] != expected_kind:
+            raise ValueError(f"Expected move kind {expected_kind!r}, got {move[0]!r}")
+        if len(move) == base_len:
+            return None
+        if len(move) == base_len + 1 and move[-1] in cls.attack_stereo_modes:
+            return move[-1]
+        raise ValueError(f"Invalid {expected_kind!r} move shape: {move!r}")
+
+    def replace_or_create_bond(self, idx_atom_1, idx_atom_2, delta_bond_order):
+        bond = None
+        for b_idx, bond_ in enumerate(self.bonds):
+            if (
+                bond_.atom1.idx == idx_atom_1
+                and bond_.atom2.idx == idx_atom_2
+            ) or (
+                bond_.atom1.idx == idx_atom_2
+                and bond_.atom2.idx == idx_atom_1
+            ):
+                bond = bond_
+                bond_idx = b_idx
+                break
+
+        if bond is None:
+            if delta_bond_order < 1:
+                raise BondNotFoundError(
+                    f"Could not find a bond between {idx_atom_1} and {idx_atom_2}"
+                )
+            atom1 = self.atoms[idx_atom_1]
+            atom2 = self.atoms[idx_atom_2]
+            self.bonds.append(ChrimpBond(atom1, atom2, delta_bond_order))
+            return None
+
+        new_bond_order = bond.typebondint + delta_bond_order
+        atom1, atom2 = bond.atom1, bond.atom2
+        self.bonds.remove(bond)
+        atom1.bonds.remove(bond)
+        atom2.bonds.remove(bond)
+
+        if new_bond_order > 0:
+            self.bonds.append(ChrimpBond(atom1, atom2, new_bond_order))
+
+        return bond_idx
+
+    def refresh_tetrahedral_chirality(self, atom_idx, stereo_mode="retain"):
+        atom = self.atoms[atom_idx]
+        if atom.has_tetrahedral_chirality:
+            self.update_tetrahedral_chirality(atom_idx, stereo_mode=stereo_mode)
+
+    def stereo_modes_for_acceptor(self, acceptor_idx):
+        acceptor = self.atoms[acceptor_idx]
+        if acceptor.has_tetrahedral_chirality:
+            return ("retain", "invert")
+        return (None,)
+
     #Helper: ChrimpAtom -> RDKit atom
     def to_rdkit_mol(self, include_chirality=True):
         rw_mol = Chem.RWMol() #creates a read-write RDKit molecule
@@ -668,10 +726,13 @@ class MoleculeSet:
         if move[0] == "i":
             new_mol_set = self.make_ionization_move(move)
         elif move[0] == "a":
+            radical_indices = [
+                atom_idx for atom_idx in move[1:] if isinstance(atom_idx, int)
+            ]
             new_mol_set = self.make_attack_move(
                 move,
                 one_e_attack=any(
-                    [self.atoms[atom_idx].radical for atom_idx in move[1:]]
+                    [self.atoms[atom_idx].radical for atom_idx in radical_indices]
                 ),
             )
         elif move[0] == "ba":
@@ -687,49 +748,28 @@ class MoleculeSet:
         return new_mol_set
 
     def make_bond_attack_move(self, move, one_e_attack: bool = False) -> "MoleculeSet":
+        stereo_mode = self.parse_attack_stereo_mode(move, "ba")
         inter_ms = (
             self.make_homocleavage_move(("hv", move[1], move[2]))
             if one_e_attack
             else self.make_ionization_move(("i", move[1], move[2]))
         )
-        return inter_ms.make_attack_move(
-            ("a", move[2], move[3]), one_e_attack=one_e_attack
+        attack_move = (
+            ("a", move[2], move[3], stereo_mode)
+            if stereo_mode is not None
+            else ("a", move[2], move[3])
         )
+        return inter_ms.make_attack_move(attack_move, one_e_attack=one_e_attack)
 
     def make_attack_move(self, move, one_e_attack: bool = False) -> "MoleculeSet":
         mol_set_copy = self.copy()
+        stereo_mode = self.parse_attack_stereo_mode(move, "a")
         idx_attacker, idx_electron_acceptor = move[1], move[2]
         attacker, acceptor = (
             mol_set_copy.atoms[idx_attacker],
             mol_set_copy.atoms[idx_electron_acceptor],
         )
-
-        # Check if a bond already exists between the two atoms
-        bond_found = False
-        for b_idx, bond in enumerate(mol_set_copy.bonds):
-            if (
-                bond.atom1.idx == idx_attacker
-                and bond.atom2.idx == idx_electron_acceptor
-            ) or (
-                bond.atom1.idx == idx_electron_acceptor
-                and bond.atom2.idx == idx_attacker
-            ):
-                bond_found = True
-                bond_idx = b_idx
-                break
-
-        if bond_found:
-            bond = mol_set_copy.bonds[bond_idx]
-            new_bond_order = bond.typebondint + 1
-            atom1, atom2 = bond.atom1, bond.atom2
-
-            mol_set_copy.bonds.remove(bond)
-            atom1.bonds.remove(bond)
-            atom2.bonds.remove(bond)
-            mol_set_copy.bonds.append(ChrimpBond(atom1, atom2, new_bond_order))
-
-        else:
-            mol_set_copy.bonds.append(ChrimpBond(attacker, acceptor, 1))
+        mol_set_copy.replace_or_create_bond(idx_attacker, idx_electron_acceptor, 1)
 
         # Update the charges of the atoms
         if not one_e_attack:
@@ -738,6 +778,18 @@ class MoleculeSet:
 
             attacker.already_used_for_donor = True
             acceptor.already_used_for_acceptor = True
+
+        acceptor_stereo_mode = stereo_mode
+        if acceptor_stereo_mode is None and acceptor.has_tetrahedral_chirality:
+            acceptor_stereo_mode = "clear"
+
+        mol_set_copy.refresh_tetrahedral_chirality(idx_attacker)
+        if acceptor_stereo_mode is not None:
+            mol_set_copy.refresh_tetrahedral_chirality(
+                idx_electron_acceptor, stereo_mode=acceptor_stereo_mode
+            )
+        else:
+            mol_set_copy.refresh_tetrahedral_chirality(idx_electron_acceptor)
 
         return mol_set_copy
 
@@ -780,6 +832,9 @@ class MoleculeSet:
             atom2.bonds.remove(bond)
             mol_set_copy.bonds.remove(bond)
             mol_set_copy.bonds.append(ChrimpBond(atom1, atom2, new_bond_order))
+
+        mol_set_copy.refresh_tetrahedral_chirality(idx_atom_1)
+        mol_set_copy.refresh_tetrahedral_chirality(idx_atom_2)
 
         return mol_set_copy
 
@@ -836,6 +891,9 @@ class MoleculeSet:
         acceptor_atom.charge -= 1
         donor_atom.already_used_for_donor = True
         acceptor_atom.already_used_for_acceptor = True
+
+        mol_set_copy.refresh_tetrahedral_chirality(idx_electron_donor)
+        mol_set_copy.refresh_tetrahedral_chirality(idx_electron_acceptor)
 
         return mol_set_copy
 
@@ -996,7 +1054,6 @@ class MoleculeSet:
     def all_legal_attack_moves(self, donor_idx=None):
         # An attack move has the form: ('a', idx_attacker, idx_electron_acceptor)
         a_moves = []
-        # TODO if accepting end is chiral, one need to account for that and add two moves (inversion and double-inversion)
         for atom, other_atom in product(self.atoms, self.atoms):
             if donor_idx is None or donor_idx == atom.idx:
                 if (
@@ -1005,7 +1062,12 @@ class MoleculeSet:
                     and not atom.already_used_for_donor
                     and not other_atom.already_used_for_acceptor
                 ):
-                    a_moves.append(("a", atom.idx, other_atom.idx))
+                    for stereo_mode in self.stereo_modes_for_acceptor(other_atom.idx):
+                        a_moves.append(
+                            ("a", atom.idx, other_atom.idx)
+                            if stereo_mode is None
+                            else ("a", atom.idx, other_atom.idx, stereo_mode)
+                        )
         return a_moves
 
     def all_legal_bond_attack_moves(
@@ -1056,9 +1118,20 @@ class MoleculeSet:
                                 or attacker.already_used_for_acceptor
                                 or attacker.already_used_for_donor
                             ):
-                                ba_moves.append(
-                                    ("ba", donor.idx, attacker.idx, acceptor.idx)
-                                )
+                                for stereo_mode in self.stereo_modes_for_acceptor(
+                                    acceptor.idx
+                                ):
+                                    ba_moves.append(
+                                        ("ba", donor.idx, attacker.idx, acceptor.idx)
+                                        if stereo_mode is None
+                                        else (
+                                            "ba",
+                                            donor.idx,
+                                            attacker.idx,
+                                            acceptor.idx,
+                                            stereo_mode,
+                                        )
+                                    )
         return ba_moves
 
     def calc_molblock(self, vts_is_uranium=False):
@@ -1386,11 +1459,17 @@ class MoleculeSet:
         arrows = []
         for m in move:
             if m[0] == "a":
-                arrows.append((m[1], m[2]))
+                arrows.append(
+                    (m[1], m[2]) if len(m) == 3 else (m[1], m[2], m[3])
+                )
             elif m[0] == "i":
                 arrows.append(((m[1], m[2]), m[2]))
             elif m[0] == "ba":
-                arrows.append(((m[1], m[2]), m[3]))
+                arrows.append(
+                    ((m[1], m[2]), m[3])
+                    if len(m) == 4
+                    else ((m[1], m[2]), m[3], m[4])
+                )
             else:
                 raise NotImplementedError(
                     "In 'move_mechsmiles', only moves of types 'a', 'i' and 'ba' are considered for now"
@@ -1406,6 +1485,8 @@ class MoleculeSet:
             if isinstance(tup, int):
                 all_used_indices.add(tup + 1)
                 return tup + 1
+            elif isinstance(tup, str):
+                return tup
             elif isinstance(tup, tuple):
                 return tuple(increment_tuple(i) for i in tup)
 
@@ -1415,6 +1496,8 @@ class MoleculeSet:
         def convert_tuple(tup, dic):
             if isinstance(tup, int):
                 return dic[tup]
+            elif isinstance(tup, str):
+                return tup
             elif isinstance(tup, tuple):
                 return tuple(convert_tuple(i, dic) for i in tup)
 
