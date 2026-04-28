@@ -1,4 +1,6 @@
 import re
+import ast
+from dataclasses import dataclass
 from rdkit import Chem
 from colorama import Fore
 from collections import Counter
@@ -37,6 +39,15 @@ class MechSmilesInitError(Exception):
     pass
 
 
+@dataclass
+class StereoUpdate:
+    center_idx: int
+    stereo_mode: str
+    ligand_replacements: dict
+    original_chiral_tag: object | None = None
+    original_chiral_neighbors: tuple | None = None
+
+
 class MechSmiles:
     """
     A class to represent a mechanistic SMILES string.
@@ -58,6 +69,62 @@ class MechSmiles:
     warning_dummy_already_printed = False
 
     default_hide_observers = False
+
+    @staticmethod
+    def build_value(smiles, arrows_string="", stereo_string=""):
+        value = f"{smiles}|{arrows_string}"
+        if stereo_string:
+            value += f"|{stereo_string}"
+        return value
+
+    @staticmethod
+    def remap_stereo_update(stereo_string, reactive_indices_dict):
+        center_map, stereo_mode, ligand_pairs = MechSmiles.parse_stereo_update(
+            stereo_string
+        )
+
+        new_center = int(reactive_indices_dict[str(center_map)])
+
+        new_pairs = tuple(
+            (
+                int(reactive_indices_dict[str(old_ligand)]),
+                int(reactive_indices_dict[str(new_ligand)]),
+            )
+            for old_ligand, new_ligand in ligand_pairs
+        )
+
+        return f"TH({new_center},{stereo_mode!r},{new_pairs!r})"
+
+    @staticmethod
+    def collect_stereo_update_indices(stereo_string):
+        center_map, _, ligand_pairs = MechSmiles.parse_stereo_update(stereo_string)
+
+        indices = {str(center_map)}
+
+        for old_ligand, new_ligand in ligand_pairs:
+            indices.add(str(old_ligand))
+            indices.add(str(new_ligand))
+
+        return indices
+
+    @staticmethod
+    def parse_stereo_update(stereo_string):
+        if not stereo_string.startswith("TH"):
+            raise ValueError(f"Unknown stereo update: {stereo_string}")
+
+        payload = stereo_string[2:]
+
+        try:
+            center_map, stereo_mode, ligand_pairs = ast.literal_eval(payload)
+        except Exception as e:
+            raise ValueError(f"Invalid stereo update format: {stereo_string}") from e
+
+        if stereo_mode not in MoleculeSet.attack_stereo_modes:
+            raise ValueError(f"Invalid stereo mode: {stereo_mode}")
+
+        ligand_pairs = tuple(tuple(pair) for pair in ligand_pairs)
+
+        return center_map, stereo_mode, ligand_pairs
 
     @staticmethod
     def parse_arrow_tuple(arrow_smiles):
@@ -101,7 +168,7 @@ class MechSmiles:
 
     def init_everything_from_value(self, value, conds=None, context=None):
         self.value = value
-        value_split = value.split("|")
+        value_split = value.split("|", 2)
         self.smiles = value_split[0]
         try:
             self.ms = MoleculeSet.from_smiles(self.smiles)
@@ -145,6 +212,16 @@ class MechSmiles:
             self.all_arrows_string = value_split[1]
         else:
             self.all_arrows_string = ""
+
+        if len(value_split) > 2:
+            self.all_stereo_string = value_split[2]
+        else:
+            self.all_stereo_string = ""
+
+        if len(self.all_stereo_string) > 0:
+            self.stereo_update_strings = self.all_stereo_string.split(";")
+        else:
+            self.stereo_update_strings = []
 
         if len(self.all_arrows_string) > 0:
             self.smiles_arrows = self.all_arrows_string.split(";")
@@ -195,14 +272,23 @@ class MechSmiles:
         species = self.smiles.split(".")
         new_smiles = ".".join([s for s in species if regex.search(s)])
         self.init_everything_from_value(
-            f"{new_smiles}|{self.all_arrows_string}",
+            self.build_value(
+                new_smiles,
+                self.all_arrows_string,
+                self.all_stereo_string,
+            ),
             conds=[s for s in species if not regex.search(s)],
         )
 
     def unhide_cond(self):
         new_smiles = ".".join(([self.smiles] if self.smiles != "" else []) + self.conds)
         self.init_everything_from_value(
-            f"{new_smiles}|{self.all_arrows_string}", conds=[]
+            self.build_value(
+                new_smiles,
+                self.all_arrows_string,
+                self.all_stereo_string,
+            ),
+            conds=[],
         )
 
     def standardize(self, verbose=False):
@@ -252,7 +338,29 @@ class MechSmiles:
         new_new_mol, _ = filter_hydrogens(new_mol, [], mapped_or_isolated_idx)
 
         self.init_everything_from_value(
-            Chem.MolToSmiles(new_new_mol) + "|" + self.all_arrows_string
+            self.build_value(
+                Chem.MolToSmiles(new_new_mol),
+                self.all_arrows_string,
+                self.all_stereo_string,
+            )
+        )
+
+    def process_stereo_update(self, stereo_string, atom_map_dict):
+        center_map, stereo_mode, ligand_pairs = self.parse_stereo_update(stereo_string)
+
+        center_idx = atom_map_dict[center_map]
+
+        ligand_replacements = {
+            atom_map_dict[old_ligand_map]: atom_map_dict[new_ligand_map]
+            for old_ligand_map, new_ligand_map in ligand_pairs
+        }
+
+        return StereoUpdate(
+            center_idx=center_idx,
+            stereo_mode=stereo_mode,
+            ligand_replacements=ligand_replacements,
+            original_chiral_tag=self.ms.atoms[center_idx].chiral_tag,
+            original_chiral_neighbors=self.ms.atoms[center_idx].chiral_neighbors,
         )
 
     def unmap_nonreactive_atoms(self):
@@ -260,9 +368,16 @@ class MechSmiles:
         Remove the mapping of all atoms that do not participate in the arrow-pushes
         """
         reactive_indices = set()
-        for arrow in self.smiles_arrows:
-            reactive_indices.update(self.collect_arrow_indices(self.parse_arrow_tuple(arrow)))
 
+        for arrow in self.smiles_arrows:
+            reactive_indices.update(
+                self.collect_arrow_indices(self.parse_arrow_tuple(arrow))
+            )
+
+        for stereo_string in self.stereo_update_strings:
+            reactive_indices.update(
+                self.collect_stereo_update_indices(stereo_string)
+            )
         # get all indices in SMILES
         indices_smiles = set(re.findall(r":(\d+)]", self.smiles))
 
@@ -273,7 +388,13 @@ class MechSmiles:
             # Replace the :\d+] pattern by a simple closing square bracket ]
             final_smiles = re.sub(f":{idx}]", "]", final_smiles)
 
-        self.init_everything_from_value(final_smiles + "|" + self.all_arrows_string)
+        self.init_everything_from_value(
+            self.build_value(
+                final_smiles,
+                self.all_arrows_string,
+                self.all_stereo_string,
+            )
+        )
 
     def minimize_indices(self):
         """
@@ -308,6 +429,11 @@ class MechSmiles:
         for old_idx, new_idx in dict_remap_1.items():
             final_smiles = re.sub(f":{old_idx}]", f":{new_idx}]", final_smiles)
 
+        tmp_stereo_updates = [
+            self.remap_stereo_update(stereo_string, dict_remap_1)
+            for stereo_string in self.stereo_update_strings
+        ]
+
         all_arrows_string = ";".join(
             str(x)
             for x in [
@@ -318,7 +444,14 @@ class MechSmiles:
         for old_idx, new_idx in dict_remap_2.items():
             final_smiles = re.sub(f":{old_idx}]", f":{new_idx}]", final_smiles)
 
-        self.init_everything_from_value(f"{final_smiles}|{all_arrows_string}")
+        all_stereo_string = ";".join(
+            self.remap_stereo_update(stereo_string, dict_remap_2)
+            for stereo_string in tmp_stereo_updates
+        )
+
+        self.init_everything_from_value(
+            self.build_value(final_smiles, all_arrows_string, all_stereo_string)
+        )
 
     def check_validity(self):
         """
@@ -338,30 +471,46 @@ class MechSmiles:
         self.standardize()
         return self.value
 
+    def apply_stereo_update(self, mol_set, stereo_update):
+        center = mol_set.atoms[stereo_update.center_idx]
+        if stereo_update.original_chiral_tag is not None:
+            center.chiral_tag = stereo_update.original_chiral_tag
+        if stereo_update.original_chiral_neighbors is not None:
+            center.chiral_neighbors = tuple(stereo_update.original_chiral_neighbors)
+
+        mol_set.update_tetrahedral_chirality(
+            stereo_update.center_idx,
+            ligand_replacements=stereo_update.ligand_replacements,
+            stereo_mode=stereo_update.stereo_mode,
+        )
+
+    def compute_product(self):
+        processed_arrows = [
+            self.process_smiles_arrow(a, self.ms.atom_map_dict)
+            for a in self.smiles_arrows
+        ]
+        processed_stereo_updates = [
+            self.process_stereo_update(stereo_string, self.ms.atom_map_dict)
+            for stereo_string in self.stereo_update_strings
+        ]
+
+        self._ms_prod = self.ms.make_move(processed_arrows)
+        for stereo_update in processed_stereo_updates:
+            self.apply_stereo_update(self._ms_prod, stereo_update)
+        self._prod = self._ms_prod.can_smiles
+
     @property
     def prod(self):
         if self._prod is None:
             if self.check_validity():
-                self._ms_prod = self.ms.make_move(
-                    [
-                        self.process_smiles_arrow(a, self.ms.atom_map_dict)
-                        for a in self.smiles_arrows
-                    ]
-                )
-                self._prod = self._ms_prod.can_smiles
+                self.compute_product()
         return self._prod
 
     @property
     def ms_prod(self):
         if self._ms_prod is None:
             if self.check_validity():
-                self._ms_prod = self.ms.make_move(
-                    [
-                        self.process_smiles_arrow(a, self.ms.atom_map_dict)
-                        for a in self.smiles_arrows
-                    ]
-                )
-                self._prod = self._ms_prod.can_smiles
+                self.compute_product()
         return self._ms_prod
 
     def process_smiles_arrow(self, arrow_smiles, atom_map_dict):

@@ -86,6 +86,60 @@ class TestMechSmiles:
             "((1, 2), 3, 'invert')", msmi.ms.atom_map_dict
         ) == ("ba", 0, 1, 2, "invert")
 
+    def test_process_stereo_update_maps_ligand_replacement(self):
+        msmi = MechSmiles(
+            "[F:1][P@:2]([Cl:3])([Br:4])[I:5].[O-:6]"
+            "|(6,2);((2,5),5)|TH(2,'invert',((5,6),))"
+        )
+
+        update = msmi.process_stereo_update(
+            "TH(2,'invert',((5,6),))", msmi.ms.atom_map_dict
+        )
+
+        assert update.center_idx == msmi.ms.atom_map_dict[2]
+        assert update.stereo_mode == "invert"
+        assert update.ligand_replacements == {
+            msmi.ms.atom_map_dict[5]: msmi.ms.atom_map_dict[6]
+        }
+        assert update.original_chiral_neighbors == (
+            msmi.ms.atoms[update.center_idx].chiral_neighbors
+        )
+
+    def test_stereo_update_standardize_is_stable_and_remaps_indices(self):
+        msmi = MechSmiles(
+            "[F:10][P@:20]([Cl:30])([Br:40])[I:50].[O-:60]"
+            "|(60,20);((20,50),50)|TH(20,'invert',((50,60),))"
+        )
+
+        msmi.standardize()
+        first_std = msmi.value
+        center_map, stereo_mode, ligand_pairs = MechSmiles.parse_stereo_update(
+            msmi.stereo_update_strings[0]
+        )
+
+        mapped_indices = set(map(int, re.findall(r":(\d+)]", msmi.smiles)))
+        assert len(first_std.split("|")) == 3
+        assert stereo_mode == "invert"
+        assert {center_map, *ligand_pairs[0]}.issubset(mapped_indices)
+
+        msmi.standardize()
+        assert first_std == msmi.value
+
+    def test_stereo_update_maps_changed_ligand_in_mechsmiles_product(self):
+        base = (
+            "[F:1][P@:2]([Cl:3])([Br:4])[I:5].[O-:6]"
+            "|(6,2);((2,5),5)"
+        )
+
+        legacy = MechSmiles(base).prod
+        retained = MechSmiles(base + "|TH(2,'retain',((5,6),))").prod
+        inverted = MechSmiles(base + "|TH(2,'invert',((5,6),))").prod
+
+        assert "@" not in legacy
+        assert "@" in retained
+        assert "@" in inverted
+        assert retained != inverted
+
     def test_stereo_annotated_mechsmiles_product_preserves_chirality(self):
         msmi = MechSmiles("[Cl:1][P@:2]([F:3])([Br:4])[I:5]|(1, 2, 'invert')")
 
