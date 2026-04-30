@@ -93,7 +93,24 @@ class MechSmiles:
             for old_ligand, new_ligand in ligand_pairs
         )
 
-        return f"TH({new_center},{stereo_mode!r},{new_pairs!r})"
+        return MechSmiles.format_stereo_update(new_center, stereo_mode, new_pairs)
+
+    @staticmethod
+    def format_stereo_update(center_map, stereo_mode, ligand_pairs):
+        if ligand_pairs:
+            pairs_string = (
+                "("
+                + ",".join(
+                    f"({old_ligand},{new_ligand})"
+                    for old_ligand, new_ligand in ligand_pairs
+                )
+                + ("," if len(ligand_pairs) == 1 else "")
+                + ")"
+            )
+        else:
+            pairs_string = "()"
+
+        return f"TH({center_map},{stereo_mode!r},{pairs_string})"
 
     @staticmethod
     def collect_stereo_update_indices(stereo_string):
@@ -109,20 +126,48 @@ class MechSmiles:
 
     @staticmethod
     def parse_stereo_update(stereo_string):
-        if not stereo_string.startswith("TH"):
+        if not stereo_string.startswith("TH(") or not stereo_string.endswith(")"):
             raise ValueError(f"Unknown stereo update: {stereo_string}")
 
         payload = stereo_string[2:]
 
         try:
-            center_map, stereo_mode, ligand_pairs = ast.literal_eval(payload)
+            stereo_update = ast.literal_eval(payload)
         except Exception as e:
             raise ValueError(f"Invalid stereo update format: {stereo_string}") from e
+
+        if not isinstance(stereo_update, tuple) or len(stereo_update) != 3:
+            raise ValueError(
+                "Tetrahedral stereo update must have format "
+                "TH(center,'mode',((old_ligand,new_ligand),))"
+            )
+
+        center_map, stereo_mode, ligand_pairs = stereo_update
+
+        if type(center_map) is not int:
+            raise ValueError(f"Stereo update center must be an integer: {center_map!r}")
 
         if stereo_mode not in MoleculeSet.attack_stereo_modes:
             raise ValueError(f"Invalid stereo mode: {stereo_mode}")
 
-        ligand_pairs = tuple(tuple(pair) for pair in ligand_pairs)
+        if not isinstance(ligand_pairs, tuple):
+            raise ValueError("Stereo update ligand replacements must be a tuple")
+
+        if stereo_mode in {"clear", "unknown"} and ligand_pairs:
+            raise ValueError(
+                f"Stereo mode {stereo_mode!r} must use empty ligand replacements: ()"
+            )
+
+        for pair in ligand_pairs:
+            if (
+                not isinstance(pair, tuple)
+                or len(pair) != 2
+                or any(type(ligand) is not int for ligand in pair)
+            ):
+                raise ValueError(
+                    "Stereo update ligand replacements must be "
+                    "(old_ligand,new_ligand) integer pairs"
+                )
 
         return center_map, stereo_mode, ligand_pairs
 

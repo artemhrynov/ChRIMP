@@ -1457,23 +1457,60 @@ class MoleculeSet:
         Chem.Kekulize(rdkit_mol, clearAromaticFlags=True)
 
         arrows = []
+        stereo_events = []
+        broken_bonds_by_atom = defaultdict(list)
+
+        def validate_stereo_mode(stereo_mode):
+            if stereo_mode not in self.attack_stereo_modes:
+                raise ValueError(f"Invalid stereo mode: {stereo_mode!r}")
+
         for m in move:
             if m[0] == "a":
-                arrows.append(
-                    (m[1], m[2]) if len(m) == 3 else (m[1], m[2], m[3])
-                )
+                if len(m) == 3:
+                    arrows.append((m[1], m[2]))
+                elif len(m) == 4:
+                    validate_stereo_mode(m[3])
+                    arrows.append((m[1], m[2]))
+                    stereo_events.append((m[2], m[3], m[1]))
+                else:
+                    raise ValueError(f"Invalid attack move shape: {m!r}")
             elif m[0] == "i":
                 arrows.append(((m[1], m[2]), m[2]))
+                broken_bonds_by_atom[m[1]].append(m[2])
+                broken_bonds_by_atom[m[2]].append(m[1])
             elif m[0] == "ba":
-                arrows.append(
-                    ((m[1], m[2]), m[3])
-                    if len(m) == 4
-                    else ((m[1], m[2]), m[3], m[4])
-                )
+                if len(m) == 4:
+                    arrows.append(((m[1], m[2]), m[3]))
+                elif len(m) == 5:
+                    validate_stereo_mode(m[4])
+                    arrows.append(((m[1], m[2]), m[3]))
+                    stereo_events.append((m[3], m[4], m[2]))
+                else:
+                    raise ValueError(f"Invalid bond-attack move shape: {m!r}")
             else:
                 raise NotImplementedError(
                     "In 'move_mechsmiles', only moves of types 'a', 'i' and 'ba' are considered for now"
                 )
+
+        stereo_updates = []
+        stereo_update_indices = {}
+        broken_bond_cursors = defaultdict(int)
+        for center_idx, stereo_mode, new_ligand_idx in stereo_events:
+            ligand_pairs = ()
+            if stereo_mode not in {"clear", "unknown"}:
+                broken_ligands = broken_bonds_by_atom.get(center_idx, [])
+                while broken_bond_cursors[center_idx] < len(broken_ligands):
+                    old_ligand_idx = broken_ligands[broken_bond_cursors[center_idx]]
+                    broken_bond_cursors[center_idx] += 1
+                    if old_ligand_idx != new_ligand_idx:
+                        ligand_pairs = ((old_ligand_idx, new_ligand_idx),)
+                        break
+
+            stereo_key = (center_idx, stereo_mode)
+            if stereo_key not in stereo_update_indices:
+                stereo_update_indices[stereo_key] = len(stereo_updates)
+                stereo_updates.append([center_idx, stereo_mode, []])
+            stereo_updates[stereo_update_indices[stereo_key]][2].extend(ligand_pairs)
 
         for i, atom in enumerate(rdkit_mol.GetAtoms()):
             atom.SetAtomMapNum(i + 1)
@@ -1491,6 +1528,22 @@ class MoleculeSet:
                 return tuple(increment_tuple(i) for i in tup)
 
         pre_final_arrows = [increment_tuple(arrow) for arrow in arrows]
+
+        pre_final_stereo_updates = []
+        for center_idx, stereo_mode, ligand_pairs in stereo_updates:
+            center_idx += 1
+            all_used_indices.add(center_idx)
+            incremented_pairs = []
+            for old_ligand_idx, new_ligand_idx in ligand_pairs:
+                old_ligand_idx += 1
+                new_ligand_idx += 1
+                all_used_indices.add(old_ligand_idx)
+                all_used_indices.add(new_ligand_idx)
+                incremented_pairs.append((old_ligand_idx, new_ligand_idx))
+            pre_final_stereo_updates.append(
+                (center_idx, stereo_mode, tuple(incremented_pairs))
+            )
+
         lower_int_convert = {k: (i + 1) for i, k in enumerate(all_used_indices)}
 
         def convert_tuple(tup, dic):
@@ -1503,6 +1556,21 @@ class MoleculeSet:
 
         final_arrows = [
             convert_tuple(arrow, lower_int_convert) for arrow in pre_final_arrows
+        ]
+
+        final_stereo_updates = [
+            (
+                lower_int_convert[center_idx],
+                stereo_mode,
+                tuple(
+                    (
+                        lower_int_convert[old_ligand_idx],
+                        lower_int_convert[new_ligand_idx],
+                    )
+                    for old_ligand_idx, new_ligand_idx in ligand_pairs
+                ),
+            )
+            for center_idx, stereo_mode, ligand_pairs in pre_final_stereo_updates
         ]
 
         for idx_atom, atom in enumerate(rdkit_mol.GetAtoms()):
@@ -1524,6 +1592,26 @@ class MoleculeSet:
         rdkit_mol = rwmol.GetMol()
 
         mech_smiles_string = f"{Chem.MolToSmiles(rdkit_mol, kekuleSmiles=True)}|{';'.join([str(a) for a in final_arrows])}"
+        if final_stereo_updates:
+            def format_stereo_update(center_idx, stereo_mode, ligand_pairs):
+                if ligand_pairs:
+                    pairs_string = (
+                        "("
+                        + ",".join(
+                            f"({old_ligand_idx},{new_ligand_idx})"
+                            for old_ligand_idx, new_ligand_idx in ligand_pairs
+                        )
+                        + ("," if len(ligand_pairs) == 1 else "")
+                        + ")"
+                    )
+                else:
+                    pairs_string = "()"
+                return f"TH({center_idx},{stereo_mode!r},{pairs_string})"
+
+            mech_smiles_string += "|" + ";".join(
+                format_stereo_update(center_idx, stereo_mode, ligand_pairs)
+                for center_idx, stereo_mode, ligand_pairs in final_stereo_updates
+            )
         # print(f"{Fore.GREEN}MechSmiles string: {mech_smiles_string}{Fore.RESET}")
         return mech_smiles_string
 
