@@ -50,11 +50,13 @@ def translate_and_validate(pmechdb_string):
         re.escape("N(=O)=O"), "[N+](=O)[O-]", pmechdb_string
     )  # Rewrite nitro in a form that doesn't violate the octet
     new_pmechdb_string = re.sub(
-        r"[@\\/]", "", pmechdb_string
-    )  # ChRIMP doesn't support chirality yet
+        r"[\\/]", "", pmechdb_string
+    )  # ChRIMP supports tetrahedral chirality, but not bond stereochemistry yet
 
     if pmechdb_string != new_pmechdb_string:
-        print(f"{Fore.YELLOW}Careful: ChRIMP doesn't support chirality yet{Fore.RESET}")
+        print(
+            f"{Fore.YELLOW}Careful: ChRIMP doesn't support bond stereochemistry yet{Fore.RESET}"
+        )
         pmechdb_string = new_pmechdb_string
 
     rxn_pmdb, arr_pmdb = pmechdb_string.split(" ")
