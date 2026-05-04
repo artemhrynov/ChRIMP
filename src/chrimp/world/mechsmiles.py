@@ -181,6 +181,19 @@ class MechSmiles:
         )
 
     @staticmethod
+    def arrow_tuple_contains_stereo_mode(tup):
+        if isinstance(tup, str):
+            return tup in MoleculeSet.attack_stereo_modes
+
+        if isinstance(tup, tuple):
+            return any(
+                MechSmiles.arrow_tuple_contains_stereo_mode(item)
+                for item in tup
+            )
+
+        return False
+
+    @staticmethod
     def collect_arrow_indices(tup):
         if isinstance(tup, int):
             return {str(tup)}
@@ -559,9 +572,15 @@ class MechSmiles:
         return self._ms_prod
 
     def process_smiles_arrow(self, arrow_smiles, atom_map_dict):
-        # text has either a form of (a, b), (a, b, "retain"), ((a, b), b),
-        # ((a, b), c), ((a, b), c, "invert"), or (hv, (a, b))
         tup = self.parse_arrow_tuple(arrow_smiles)
+
+        if self.arrow_tuple_contains_stereo_mode(tup):
+            raise ValueError(
+                "Stereo modes are not allowed inside the public MechSMILES "
+                "arrow field. Use the canonical format "
+                "SMILES|arrows|TH(center,'mode',ligand_replacements) instead."
+            )
+
 
         if not isinstance(tup, tuple):
             return ()

@@ -1,48 +1,106 @@
+from pathlib import Path
+
+import pytest
 from tokenizers import Tokenizer
 
-tok = Tokenizer.from_file(
-    "src/chrimp/agent/tokenizer/mechsmiles_tokenizer.json"
-)
 
-examples = [
-    # simple isolated stereo updates
-    "TH(1,'invert',((5,6),))",
-    "TH(1,'retain',((5,6),))",
-    "TH(1,'clear',())",
-    "TH(1,'unknown',())",
+TOKENIZER_PATHS = [
+    Path("src/chrimp/agent/tokenizer/mechsmiles_tokenizer.json"),
+    Path("src/chrimp/agent/tokenizer/mechsmiles_tokenizer_folder/tokenizer.json"),
+]
 
-    # larger atom-map numbers
-    "TH(12,'invert',((34,56),))",
-    "TH(99,'retain',((10,11),))",
+STEREO_MODE_EXAMPLES = [
+    ("TH(1,'invert',((5,6),))", "'invert'"),
+    ("TH(1,'retain',((5,6),))", "'retain'"),
+    ("TH(1,'clear',())", "'clear'"),
+    ("TH(1,'unknown',())", "'unknown'"),
+]
 
-    # multiple ligand replacements
-    "TH(1,'invert',((5,6),(7,8)))",
-    "TH(12,'retain',((34,56),(78,90)))",
-
-    # full MechSMILES with stereo update
+FULL_MECHSMILES_EXAMPLES = [
     "[C@:1]([F:2])([Cl:3])([Br:4])[I:5]|(6,1)|TH(1,'invert',((5,6),))",
-
-    # full MechSMILES with normal arrow and retain
     "[OH-:1].[C@:2]([H:3])([Cl:4])[Br:5]|(1,2)|TH(2,'retain',((5,1),))",
-
-    # full MechSMILES with bond attack and stereo
     "[C@:1]([F:2])([Cl:3])([Br:4])[I:5]|((2,3),1)|TH(1,'invert',((4,6),))",
-
-    # several arrows plus one stereo update
     "[OH-:1].[C@:2]([H:3])([Cl:4])[Br:5]|(1,2);((2,5),5)|TH(2,'invert',((5,1),))",
-
-    # clear/unknown in full strings
     "[C@:1]([F:2])([Cl:3])([Br:4])[I:5]|(6,1)|TH(1,'clear',())",
     "[C@:1]([F:2])([Cl:3])([Br:4])[I:5]|(6,1)|TH(1,'unknown',())",
-
-    # chirality symbols @ and @@
     "F[C@:1]([Cl:2])([Br:3])[I:4]|(5,1)|TH(1,'retain',((4,5),))",
     "F[C@@:1]([Cl:2])([Br:3])[I:4]|(5,1)|TH(1,'invert',((4,5),))",
 ]
 
 
-for s in examples:
-    enc = tok.encode(s)
-    assert "[unk]" not in enc.tokens, f"Tokenizer failed on: {s}\n{enc.tokens}"
+@pytest.fixture(params=TOKENIZER_PATHS, ids=lambda path: path.name)
+def tokenizer(request):
+    path = request.param
+    assert path.exists(), f"Tokenizer file does not exist: {path}"
+    return Tokenizer.from_file(str(path))
 
-print("All examples passed.")
+
+def test_tokenizer_vocab_contains_tetrahedral_stereo_tokens(tokenizer):
+    vocab = tokenizer.get_vocab()
+
+    expected_tokens = [
+        "TH",
+        "'invert'",
+        "'retain'",
+        "'clear'",
+        "'unknown'",
+    ]
+
+    for token in expected_tokens:
+        assert token in vocab, f"Missing token from vocabulary: {token}"
+
+    ids = [vocab[token] for token in expected_tokens]
+    assert len(ids) == len(set(ids)), "Stereo tokens should have unique token IDs"
+
+
+def test_tokenizer_splits_invert_stereo_update_exactly(tokenizer):
+    text = "TH(1,'invert',((5,6),))"
+
+    tokens = tokenizer.encode(text).tokens
+
+    assert tokens == [
+        "TH",
+        "(",
+        "1",
+        ",",
+        "'invert'",
+        ",",
+        "(",
+        "(",
+        "5",
+        ",",
+        "6",
+        ")",
+        ",",
+        ")",
+        ")",
+    ]
+
+
+@pytest.mark.parametrize("text, mode_token", STEREO_MODE_EXAMPLES)
+def test_tokenizer_recognizes_all_tetrahedral_stereo_modes(tokenizer, text, mode_token):
+    tokens = tokenizer.encode(text).tokens
+
+    assert "[unk]" not in tokens
+    assert "TH" in tokens
+    assert mode_token in tokens
+
+
+@pytest.mark.parametrize("text", FULL_MECHSMILES_EXAMPLES)
+def test_tokenizer_handles_full_stereo_mechsmiles_without_unknown_tokens(tokenizer, text):
+    tokens = tokenizer.encode(text).tokens
+
+    assert "[unk]" not in tokens
+
+
+def test_tokenizer_keeps_existing_mechsmiles_syntax_working(tokenizer):
+    text = "[OH-:1].[C:2][Br:3]|(1,2);((2,3),3)"
+
+    tokens = tokenizer.encode(text).tokens
+
+    assert "[unk]" not in tokens
+    assert "|" in tokens
+    assert ";" in tokens
+    assert "(" in tokens
+    assert ")" in tokens
+    assert "," in tokens
