@@ -21,7 +21,7 @@ import argparse
 import os
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from itertools import productb
+from itertools import product
 from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", "/private/tmp/matplotlib")
