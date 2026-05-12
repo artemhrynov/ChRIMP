@@ -1,4 +1,6 @@
 import re
+import ast
+from dataclasses import dataclass
 from rdkit import Chem
 from colorama import Fore
 from collections import Counter
@@ -6,7 +8,11 @@ from collections import Counter
 from chrimp.world.utils import quick_canonicalize
 from chrimp.visualization.arrows_on_mols import filter_hydrogens
 from chrimp.world.molecule_set import MoleculeSet, RadicalAtomException
-from chrimp.visualization.mechsmiles_visualizer import MechSmilesVisualizer
+
+try:
+    from chrimp.visualization.mechsmiles_visualizer import MechSmilesVisualizer
+except ModuleNotFoundError:
+    MechSmilesVisualizer = None
 
 
 class NotInitiatingAttackError(Exception):
@@ -33,6 +39,15 @@ class MechSmilesInitError(Exception):
     pass
 
 
+@dataclass
+class StereoUpdate:
+    center_idx: int
+    stereo_mode: str
+    ligand_replacements: dict
+    original_chiral_tag: object | None = None
+    original_chiral_neighbors: tuple | None = None
+
+
 class MechSmiles:
     """
     A class to represent a mechanistic SMILES string.
@@ -50,10 +65,156 @@ class MechSmiles:
     "C[C:3](=[O:4])C.[NaH3-:1][H:2]|((1,2),3);((3,4), 4)"
     """
 
-    visualizer = MechSmilesVisualizer()
+    visualizer = MechSmilesVisualizer() if MechSmilesVisualizer is not None else None
     warning_dummy_already_printed = False
 
     default_hide_observers = False
+
+    @staticmethod
+    def build_value(smiles, arrows_string="", stereo_string=""):
+        value = f"{smiles}|{arrows_string}"
+        if stereo_string:
+            value += f"|{stereo_string}"
+        return value
+
+    @staticmethod
+    def remap_stereo_update(stereo_string, reactive_indices_dict):
+        center_map, stereo_mode, ligand_pairs = MechSmiles.parse_stereo_update(
+            stereo_string
+        )
+
+        new_center = int(reactive_indices_dict[str(center_map)])
+
+        new_pairs = tuple(
+            (
+                int(reactive_indices_dict[str(old_ligand)]),
+                int(reactive_indices_dict[str(new_ligand)]),
+            )
+            for old_ligand, new_ligand in ligand_pairs
+        )
+
+        return MechSmiles.format_stereo_update(new_center, stereo_mode, new_pairs)
+
+    @staticmethod
+    def format_stereo_update(center_map, stereo_mode, ligand_pairs):
+        if ligand_pairs:
+            pairs_string = (
+                "("
+                + ",".join(
+                    f"({old_ligand},{new_ligand})"
+                    for old_ligand, new_ligand in ligand_pairs
+                )
+                + ("," if len(ligand_pairs) == 1 else "")
+                + ")"
+            )
+        else:
+            pairs_string = "()"
+
+        return f"TH({center_map},{stereo_mode!r},{pairs_string})"
+
+    @staticmethod
+    def collect_stereo_update_indices(stereo_string):
+        center_map, _, ligand_pairs = MechSmiles.parse_stereo_update(stereo_string)
+
+        indices = {str(center_map)}
+
+        for old_ligand, new_ligand in ligand_pairs:
+            indices.add(str(old_ligand))
+            indices.add(str(new_ligand))
+
+        return indices
+
+    @staticmethod
+    def parse_stereo_update(stereo_string):
+        if not stereo_string.startswith("TH(") or not stereo_string.endswith(")"):
+            raise ValueError(f"Unknown stereo update: {stereo_string}")
+
+        payload = stereo_string[2:]
+
+        try:
+            stereo_update = ast.literal_eval(payload)
+        except Exception as e:
+            raise ValueError(f"Invalid stereo update format: {stereo_string}") from e
+
+        if not isinstance(stereo_update, tuple) or len(stereo_update) != 3:
+            raise ValueError(
+                "Tetrahedral stereo update must have format "
+                "TH(center,'mode',((old_ligand,new_ligand),))"
+            )
+
+        center_map, stereo_mode, ligand_pairs = stereo_update
+
+        if type(center_map) is not int:
+            raise ValueError(f"Stereo update center must be an integer: {center_map!r}")
+
+        if stereo_mode not in MoleculeSet.attack_stereo_modes:
+            raise ValueError(f"Invalid stereo mode: {stereo_mode}")
+
+        if not isinstance(ligand_pairs, tuple):
+            raise ValueError("Stereo update ligand replacements must be a tuple")
+
+        if stereo_mode in {"clear", "unknown"} and ligand_pairs:
+            raise ValueError(
+                f"Stereo mode {stereo_mode!r} must use empty ligand replacements: ()"
+            )
+
+        for pair in ligand_pairs:
+            if (
+                not isinstance(pair, tuple)
+                or len(pair) != 2
+                or any(type(ligand) is not int for ligand in pair)
+            ):
+                raise ValueError(
+                    "Stereo update ligand replacements must be "
+                    "(old_ligand,new_ligand) integer pairs"
+                )
+
+        return center_map, stereo_mode, ligand_pairs
+
+    @staticmethod
+    def parse_arrow_tuple(arrow_smiles):
+        if isinstance(arrow_smiles, str):
+            arrow_smiles = re.sub(r"hv", r'"hv"', arrow_smiles)
+            return eval(arrow_smiles)
+        raise ValueError(
+            f"Arrow must be a string, instead is: {type(arrow_smiles)} with value {arrow_smiles}"
+        )
+
+    @staticmethod
+    def arrow_tuple_contains_stereo_mode(tup):
+        if isinstance(tup, str):
+            return tup in MoleculeSet.attack_stereo_modes
+
+        if isinstance(tup, tuple):
+            return any(
+                MechSmiles.arrow_tuple_contains_stereo_mode(item)
+                for item in tup
+            )
+
+        return False
+
+    @staticmethod
+    def collect_arrow_indices(tup):
+        if isinstance(tup, int):
+            return {str(tup)}
+        if isinstance(tup, tuple):
+            indices = set()
+            for item in tup:
+                indices.update(MechSmiles.collect_arrow_indices(item))
+            return indices
+        return set()
+
+    @staticmethod
+    def remap_arrow_tuple(tup, reactive_indices_dict):
+        if isinstance(tup, int):
+            return int(reactive_indices_dict[str(tup)])
+        if isinstance(tup, str):
+            return tup
+        if isinstance(tup, tuple):
+            return tuple(
+                MechSmiles.remap_arrow_tuple(i, reactive_indices_dict) for i in tup
+            )
+        return tup
 
     def __init__(
         self,
@@ -65,7 +226,7 @@ class MechSmiles:
 
     def init_everything_from_value(self, value, conds=None, context=None):
         self.value = value
-        value_split = value.split("|")
+        value_split = value.split("|", 2)
         self.smiles = value_split[0]
         try:
             self.ms = MoleculeSet.from_smiles(self.smiles)
@@ -75,6 +236,8 @@ class MechSmiles:
             raise MechSmilesInitError(f"Invalid smiles {self.smiles}")
         if conds is None:
             self.conds = [].copy()  # List of SMILES
+        else:
+            self.conds = conds.copy()
         self.context = context
 
         if context is not None:
@@ -108,6 +271,16 @@ class MechSmiles:
         else:
             self.all_arrows_string = ""
 
+        if len(value_split) > 2:
+            self.all_stereo_string = value_split[2]
+        else:
+            self.all_stereo_string = ""
+
+        if len(self.all_stereo_string) > 0:
+            self.stereo_update_strings = self.all_stereo_string.split(";")
+        else:
+            self.stereo_update_strings = []
+
         if len(self.all_arrows_string) > 0:
             self.smiles_arrows = self.all_arrows_string.split(";")
         else:
@@ -117,15 +290,31 @@ class MechSmiles:
         self._ms_prod = None
 
     def show_reac(self, **kwargs):
+        if MechSmiles.visualizer is None:
+            raise ModuleNotFoundError(
+                "Visualization dependencies are not installed for MechSmiles."
+            )
         return MechSmiles.visualizer.show_reac(self, **kwargs)
 
     def show_prod(self, **kwargs):
+        if MechSmiles.visualizer is None:
+            raise ModuleNotFoundError(
+                "Visualization dependencies are not installed for MechSmiles."
+            )
         return MechSmiles.visualizer.show_prod(self, **kwargs)
 
     def show_cond(self, **kwargs):
+        if MechSmiles.visualizer is None:
+            raise ModuleNotFoundError(
+                "Visualization dependencies are not installed for MechSmiles."
+            )
         return MechSmiles.visualizer.show_cond(self, **kwargs)
 
     def show(self, **kwargs):
+        if MechSmiles.visualizer is None:
+            raise ModuleNotFoundError(
+                "Visualization dependencies are not installed for MechSmiles."
+            )
         return MechSmiles.visualizer.show(self, **kwargs)
 
     def hide_cond(self, unmap_non_reactive_atoms=True):
@@ -141,14 +330,23 @@ class MechSmiles:
         species = self.smiles.split(".")
         new_smiles = ".".join([s for s in species if regex.search(s)])
         self.init_everything_from_value(
-            f"{new_smiles}|{self.all_arrows_string}",
+            self.build_value(
+                new_smiles,
+                self.all_arrows_string,
+                self.all_stereo_string,
+            ),
             conds=[s for s in species if not regex.search(s)],
         )
 
     def unhide_cond(self):
         new_smiles = ".".join(([self.smiles] if self.smiles != "" else []) + self.conds)
         self.init_everything_from_value(
-            f"{new_smiles}|{self.all_arrows_string}", conds=[]
+            self.build_value(
+                new_smiles,
+                self.all_arrows_string,
+                self.all_stereo_string,
+            ),
+            conds=[],
         )
 
     def standardize(self, verbose=False):
@@ -198,7 +396,29 @@ class MechSmiles:
         new_new_mol, _ = filter_hydrogens(new_mol, [], mapped_or_isolated_idx)
 
         self.init_everything_from_value(
-            Chem.MolToSmiles(new_new_mol) + "|" + self.all_arrows_string
+            self.build_value(
+                Chem.MolToSmiles(new_new_mol),
+                self.all_arrows_string,
+                self.all_stereo_string,
+            )
+        )
+
+    def process_stereo_update(self, stereo_string, atom_map_dict):
+        center_map, stereo_mode, ligand_pairs = self.parse_stereo_update(stereo_string)
+
+        center_idx = atom_map_dict[center_map]
+
+        ligand_replacements = {
+            atom_map_dict[old_ligand_map]: atom_map_dict[new_ligand_map]
+            for old_ligand_map, new_ligand_map in ligand_pairs
+        }
+
+        return StereoUpdate(
+            center_idx=center_idx,
+            stereo_mode=stereo_mode,
+            ligand_replacements=ligand_replacements,
+            original_chiral_tag=self.ms.atoms[center_idx].chiral_tag,
+            original_chiral_neighbors=self.ms.atoms[center_idx].chiral_neighbors,
         )
 
     def unmap_nonreactive_atoms(self):
@@ -206,12 +426,16 @@ class MechSmiles:
         Remove the mapping of all atoms that do not participate in the arrow-pushes
         """
         reactive_indices = set()
-        for arrow in self.smiles_arrows:
-            reactive_indices_arrow = [
-                part.strip() for part in re.split(r"[(),]", arrow) if part
-            ]
-            reactive_indices.update(reactive_indices_arrow)
 
+        for arrow in self.smiles_arrows:
+            reactive_indices.update(
+                self.collect_arrow_indices(self.parse_arrow_tuple(arrow))
+            )
+
+        for stereo_string in self.stereo_update_strings:
+            reactive_indices.update(
+                self.collect_stereo_update_indices(stereo_string)
+            )
         # get all indices in SMILES
         indices_smiles = set(re.findall(r":(\d+)]", self.smiles))
 
@@ -222,7 +446,13 @@ class MechSmiles:
             # Replace the :\d+] pattern by a simple closing square bracket ]
             final_smiles = re.sub(f":{idx}]", "]", final_smiles)
 
-        self.init_everything_from_value(final_smiles + "|" + self.all_arrows_string)
+        self.init_everything_from_value(
+            self.build_value(
+                final_smiles,
+                self.all_arrows_string,
+                self.all_stereo_string,
+            )
+        )
 
     def minimize_indices(self):
         """
@@ -248,32 +478,38 @@ class MechSmiles:
             for i, _ in enumerate(reactive_indices)
         }
 
-        def remap_tuple(tup, reactive_indices_dict):
-            if isinstance(tup, int):
-                return int(reactive_indices_dict[str(tup)])
-            elif isinstance(tup, tuple):
-                return tuple(remap_tuple(i, reactive_indices_dict) for i in tup)
-
         final_smiles = self.smiles
 
         tmp_smiles_arrows = [
-            str(remap_tuple(eval(tup_str), dict_remap_1))
+            str(self.remap_arrow_tuple(self.parse_arrow_tuple(tup_str), dict_remap_1))
             for tup_str in self.smiles_arrows
         ]
         for old_idx, new_idx in dict_remap_1.items():
             final_smiles = re.sub(f":{old_idx}]", f":{new_idx}]", final_smiles)
 
+        tmp_stereo_updates = [
+            self.remap_stereo_update(stereo_string, dict_remap_1)
+            for stereo_string in self.stereo_update_strings
+        ]
+
         all_arrows_string = ";".join(
             str(x)
             for x in [
-                remap_tuple(eval(tup_str), dict_remap_2)
+                self.remap_arrow_tuple(self.parse_arrow_tuple(tup_str), dict_remap_2)
                 for tup_str in tmp_smiles_arrows
             ]
         )
         for old_idx, new_idx in dict_remap_2.items():
             final_smiles = re.sub(f":{old_idx}]", f":{new_idx}]", final_smiles)
 
-        self.init_everything_from_value(f"{final_smiles}|{all_arrows_string}")
+        all_stereo_string = ";".join(
+            self.remap_stereo_update(stereo_string, dict_remap_2)
+            for stereo_string in tmp_stereo_updates
+        )
+
+        self.init_everything_from_value(
+            self.build_value(final_smiles, all_arrows_string, all_stereo_string)
+        )
 
     def check_validity(self):
         """
@@ -293,48 +529,75 @@ class MechSmiles:
         self.standardize()
         return self.value
 
+    def apply_stereo_update(self, mol_set, stereo_update):
+        center = mol_set.atoms[stereo_update.center_idx]
+        if stereo_update.original_chiral_tag is not None:
+            center.chiral_tag = stereo_update.original_chiral_tag
+        if stereo_update.original_chiral_neighbors is not None:
+            center.chiral_neighbors = tuple(stereo_update.original_chiral_neighbors)
+
+        mol_set.update_tetrahedral_chirality(
+            stereo_update.center_idx,
+            ligand_replacements=stereo_update.ligand_replacements,
+            stereo_mode=stereo_update.stereo_mode,
+        )
+
+    def compute_product(self):
+        processed_arrows = [
+            self.process_smiles_arrow(a, self.ms.atom_map_dict)
+            for a in self.smiles_arrows
+        ]
+        processed_stereo_updates = [
+            self.process_stereo_update(stereo_string, self.ms.atom_map_dict)
+            for stereo_string in self.stereo_update_strings
+        ]
+
+        self._ms_prod = self.ms.make_move(processed_arrows)
+        for stereo_update in processed_stereo_updates:
+            self.apply_stereo_update(self._ms_prod, stereo_update)
+        self._prod = self._ms_prod.can_smiles
+
     @property
     def prod(self):
         if self._prod is None:
             if self.check_validity():
-                self._ms_prod = self.ms.make_move(
-                    [
-                        self.process_smiles_arrow(a, self.ms.atom_map_dict)
-                        for a in self.smiles_arrows
-                    ]
-                )
-                self._prod = self._ms_prod.can_smiles
+                self.compute_product()
         return self._prod
 
     @property
     def ms_prod(self):
         if self._ms_prod is None:
             if self.check_validity():
-                self._ms_prod = self.ms.make_move(
-                    [
-                        self.process_smiles_arrow(a, self.ms.atom_map_dict)
-                        for a in self.smiles_arrows
-                    ]
-                )
-                self._prod = self._ms_prod.can_smiles
+                self.compute_product()
         return self._ms_prod
 
     def process_smiles_arrow(self, arrow_smiles, atom_map_dict):
-        # text has either a form of (a, b), ((a, b), b), ((a, b), c), or (hv, (a, b))
-        # safe_eval
-        if isinstance(arrow_smiles, str):
-            arrow_smiles = re.sub(r"hv", r'"hv"', arrow_smiles)
-            tup = eval(arrow_smiles)
-        else:
+        tup = self.parse_arrow_tuple(arrow_smiles)
+
+        if self.arrow_tuple_contains_stereo_mode(tup):
             raise ValueError(
-                f"Arrow must be a string, instead is: {type(arrow_smiles)} with value {arrow_smiles}"
+                "Stereo modes are not allowed inside the public MechSMILES "
+                "arrow field. Use the canonical format "
+                "SMILES|arrows|TH(center,'mode',ligand_replacements) instead."
             )
+
 
         if not isinstance(tup, tuple):
             return ()
 
         if isinstance(tup[0], int):  # attack move
-            return ("a", atom_map_dict[tup[0]], atom_map_dict[tup[1]])
+            if len(tup) == 2:
+                return ("a", atom_map_dict[tup[0]], atom_map_dict[tup[1]])
+            if len(tup) == 3 and isinstance(tup[2], str):
+                return (
+                    "a",
+                    atom_map_dict[tup[0]],
+                    atom_map_dict[tup[1]],
+                    tup[2],
+                )
+            raise ValueError(
+                "Attack move must have format (a, b) or (a, b, 'retain'|'invert'|'clear'|'unknown')"
+            )
 
         elif isinstance(tup[0], tuple):
             # If tup[0][1] == tup[1], it's a ionization move
@@ -343,16 +606,27 @@ class MechSmiles:
                     "Move must either have a format (a, b), ((a, b), c) or (hv, (a, b))"
                 )
 
-            if tup[0][1] == tup[1]:
+            if len(tup) == 2 and tup[0][1] == tup[1]:
                 return ("i", atom_map_dict[tup[0][0]], atom_map_dict[tup[0][1]])
 
-            else:
+            if len(tup) == 2:
                 return (
                     "ba",
                     atom_map_dict[tup[0][0]],
                     atom_map_dict[tup[0][1]],
                     atom_map_dict[tup[1]],
                 )
+            if len(tup) == 3 and isinstance(tup[2], str):
+                return (
+                    "ba",
+                    atom_map_dict[tup[0][0]],
+                    atom_map_dict[tup[0][1]],
+                    atom_map_dict[tup[1]],
+                    tup[2],
+                )
+            raise ValueError(
+                "Bond-attack move must have format ((a, b), c) or ((a, b), c, 'retain'|'invert'|'clear'|'unknown')"
+            )
 
         elif isinstance(tup[0], str) and tup[0] == "hv":
             return ("hv", atom_map_dict[tup[1][0]], atom_map_dict[tup[1][1]])
