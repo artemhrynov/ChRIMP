@@ -258,3 +258,8 @@ $
 [eos]
 [sep]
 [unk]
+TH
+'invert'
+'retain'
+'clear'
+'unknown'
