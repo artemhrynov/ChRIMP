@@ -55,6 +55,8 @@ class ChrimpAtom:
         already_acceptor=False,
         idx: Optional[int] = None,
         smiles_explicit=True,
+        chiral_tag=Chem.rdchem.ChiralType.CHI_UNSPECIFIED, 
+        chiral_neighbors=None, 
     ):
         self.symbol = symbol
         self.atomic_num = ChrimpAtom.symbol_to_atomic_num[symbol]
@@ -66,6 +68,9 @@ class ChrimpAtom:
         self.radical = radical
         self.idx = idx
         self.smiles_explicit = smiles_explicit  # If the atom is explicit or implicit (in the smiles, not in the molecule set)
+        self.chiral_tag = chiral_tag #chirality field
+        self.chiral_neighbors = tuple(chiral_neighbors or ()) #neighbouring atom indices that define stereochemical ordering
+
         if bonds is None:
             self.bonds = []
         else:
@@ -76,6 +81,20 @@ class ChrimpAtom:
 
     def __repr__(self):
         return f"ChrimpAtom({self.repr})"
+
+    #Helper: returns True if the storeg chiral_tag is one of the RDKit's tetrahedral tags: CW or CCW
+    @property
+    def has_tetrahedral_chirality(self):
+        return self.chiral_tag in {
+            Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW,
+            Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CCW,
+        }
+
+    #Helper: removes tetrahedral chirality if needed (resets tag to "unspecified", the stereo neighbour list -- to empty)
+    def clear_tetrahedral_chirality(self):
+        self.chiral_tag = Chem.rdchem.ChiralType.CHI_UNSPECIFIED
+        self.chiral_neighbors = ()
+
 
     @property
     def repr(self):
@@ -261,6 +280,7 @@ class MoleculeSet:
     default_treat_Br_I_2nd_period = False  # bool
     default_treat_P_S_Cl_12_electrons = True  # bool
     default_authorize_radicals = True  # bool
+    attack_stereo_modes = {"retain", "invert", "unknown", "clear"}
 
     def __init__(
         self, atoms, bonds, chiral: Optional[bool] = None, atom_map_dict: dict = {}
@@ -300,10 +320,15 @@ class MoleculeSet:
         # This function counteracts the addition that sometimes happens of
         # hydrogens that are neither implicit nor explicit but appear in the SMILES
 
-        # This pattern eliminates any hydrogens not alone in square brackets
+        # This pattern eliminates any hydrogens outside square-bracket atom tokens.
         pattern = r"(?<!\[)H\d*"
-        cleaned_smiles = re.sub(pattern, "", smiles)
-        return cleaned_smiles
+        chunks = re.split(r"(\[[^\]]*\])", smiles)
+        return "".join(
+            chunk
+            if chunk.startswith("[") and chunk.endswith("]")
+            else re.sub(pattern, "", chunk)
+            for chunk in chunks
+        )
 
     def put_atoms_in_brackets(self, smiles):
         # Put every atom in bracket, to avoid the apparition of implicit hydrogens
@@ -321,17 +346,258 @@ class MoleculeSet:
             return Chem.MolToSmiles(
                 Chem.MolFromSmiles(smiles, sanitize=sanitize),
                 kekuleSmiles=MoleculeSet.default_kekulize,
+                isomericSmiles=True, # now preserves stereochemical markers
             )
         except:  # noqa: E722 (Do not use bare except)
             # print(f"Could not canonicalize {smiles}")
             return smiles
 
+    #Helper: flips the tetrahedral orientation when needed
+    @staticmethod
+    def flip_chiral_tag(chiral_tag):
+        if chiral_tag == Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW:
+            return Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CCW
+        if chiral_tag == Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CCW:
+            return Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW
+        return chiral_tag
+
+    #Helper: computes whether neighbor change is an odd permutation (achieved by an odd number of operations)
+    @staticmethod
+    def permutation_is_odd(original_order, current_order):
+        positions = [original_order.index(idx) for idx in current_order]
+        inversions = 0
+        for i in range(len(positions)):
+            for j in range(i + 1, len(positions)):
+                if positions[i] > positions[j]:
+                    inversions += 1
+        return inversions % 2 == 1
+
+    #Helper: treats new ligands on the atom
+    @staticmethod
+    def remap_chiral_neighbors_after_replacement(
+        original_order, current_order, ligand_replacements=None
+    ):
+        original_order = tuple(original_order)
+        current_order = tuple(current_order)
+
+        if len(original_order) != 4 or len(current_order) != 4:
+            return None
+
+        if ligand_replacements:
+            remapped_order = tuple(
+                ligand_replacements.get(idx, idx) for idx in original_order
+            )
+            if len(set(remapped_order)) != 4:
+                return None
+            if set(remapped_order) != set(current_order):
+                return None
+            return remapped_order
+
+        original_set = set(original_order)
+        current_set = set(current_order)
+
+        if original_set == current_set:
+            return original_order
+
+        removed_neighbors = tuple(original_set - current_set)
+        added_neighbors = tuple(current_set - original_set)
+        if len(removed_neighbors) != 1 or len(added_neighbors) != 1:
+            return None
+
+        remapped_order = list(original_order)
+        remapped_order[remapped_order.index(removed_neighbors[0])] = added_neighbors[0]
+        return tuple(remapped_order)
+
+    def update_tetrahedral_chirality(
+        self, center_idx, ligand_replacements=None, stereo_mode="retain"
+    ):
+        """Update a tetrahedral stereo frame after one or more ligand changes."""
+        valid_stereo_modes = {"retain", "invert", "unknown", "clear"}
+        if stereo_mode not in valid_stereo_modes:
+            raise ValueError(
+                f"stereo_mode must be one of {sorted(valid_stereo_modes)}, "
+                f"got {stereo_mode!r}"
+            )
+
+        center = self.atoms[center_idx] 
+        if not center.has_tetrahedral_chirality:
+            return False # this means that the function cannot yet support newly created stereocentres
+
+        self.molblock_ = None
+        self.can_smiles_ = None
+        self.repr_ = None
+
+        if stereo_mode in {"unknown", "clear"}:
+            center.clear_tetrahedral_chirality()
+            self.chiral = any(atom.has_tetrahedral_chirality for atom in self.atoms) # after you potentially cleaned this atom, is the molecule still chiral
+            return False
+
+        ligand_replacements = dict(ligand_replacements or {})
+        mol = self.to_rdkit_mol(include_chirality=False) #rebuilds rdkit molecule, without considering stored chirality
+        current_neighbors = tuple(
+            atom.GetIdx() for atom in mol.GetAtomWithIdx(center.idx).GetNeighbors()
+        )
+
+        if center.idx not in self.potential_tetrahedral_chiral_atom_indices(mol):
+            center.clear_tetrahedral_chirality()
+            self.chiral = any(atom.has_tetrahedral_chirality for atom in self.atoms)
+            return False
+
+        #remap old stereo ligand frame to match the new molecule? 
+        chiral_neighbors = self.remap_chiral_neighbors_after_replacement(
+            center.chiral_neighbors,
+            current_neighbors,
+            ligand_replacements=ligand_replacements,
+        ) #center.chiral_neighbors -> old stored order of ligands around the stereocenter
+          #current_neigbors -> new actual set of ligands after the molecule has changed
+        if chiral_neighbors is None:
+            center.clear_tetrahedral_chirality()
+            self.chiral = any(atom.has_tetrahedral_chirality for atom in self.atoms)
+            return False #still does not work for multiple ligand change?
+
+        center.chiral_neighbors = chiral_neighbors
+        if stereo_mode == "invert":
+            center.chiral_tag = self.flip_chiral_tag(center.chiral_tag)
+
+        self.chiral = any(atom.has_tetrahedral_chirality for atom in self.atoms)
+        return True
+
+    #Helper: Returns possible tetrahedral stereocenters after clearing chiral tags.
+    @staticmethod
+    def potential_tetrahedral_chiral_atom_indices(mol):
+        probe_mol = Chem.Mol(mol)
+        for atom in probe_mol.GetAtoms():
+            atom.SetChiralTag(Chem.rdchem.ChiralType.CHI_UNSPECIFIED)
+        probe_mol.UpdatePropertyCache(strict=False)
+        return {
+            atom_idx
+            for atom_idx, _ in Chem.FindMolChiralCenters(
+                probe_mol, includeUnassigned=True, includeCIP=False
+            )
+        }
+
+    @staticmethod
+    def rdkit_bond_type(typebondint):
+        bond_types = {
+            1: Chem.rdchem.BondType.SINGLE,
+            2: Chem.rdchem.BondType.DOUBLE,
+            3: Chem.rdchem.BondType.TRIPLE,
+            4: Chem.rdchem.BondType.QUADRUPLE,
+        }
+        return bond_types[int(typebondint)]
+
+    @classmethod
+    def parse_attack_stereo_mode(cls, move, expected_kind):
+        base_len = 3 if expected_kind == "a" else 4
+        if move[0] != expected_kind:
+            raise ValueError(f"Expected move kind {expected_kind!r}, got {move[0]!r}")
+        if len(move) == base_len:
+            return None
+        if len(move) == base_len + 1 and move[-1] in cls.attack_stereo_modes:
+            return move[-1]
+        raise ValueError(f"Invalid {expected_kind!r} move shape: {move!r}")
+
+    def replace_or_create_bond(self, idx_atom_1, idx_atom_2, delta_bond_order):
+        bond = None
+        for b_idx, bond_ in enumerate(self.bonds):
+            if (
+                bond_.atom1.idx == idx_atom_1
+                and bond_.atom2.idx == idx_atom_2
+            ) or (
+                bond_.atom1.idx == idx_atom_2
+                and bond_.atom2.idx == idx_atom_1
+            ):
+                bond = bond_
+                bond_idx = b_idx
+                break
+
+        if bond is None:
+            if delta_bond_order < 1:
+                raise BondNotFoundError(
+                    f"Could not find a bond between {idx_atom_1} and {idx_atom_2}"
+                )
+            atom1 = self.atoms[idx_atom_1]
+            atom2 = self.atoms[idx_atom_2]
+            self.bonds.append(ChrimpBond(atom1, atom2, delta_bond_order))
+            return None
+
+        new_bond_order = bond.typebondint + delta_bond_order
+        atom1, atom2 = bond.atom1, bond.atom2
+        self.bonds.remove(bond)
+        atom1.bonds.remove(bond)
+        atom2.bonds.remove(bond)
+
+        if new_bond_order > 0:
+            self.bonds.append(ChrimpBond(atom1, atom2, new_bond_order))
+
+        return bond_idx
+
+    def refresh_tetrahedral_chirality(self, atom_idx, stereo_mode="retain"):
+        atom = self.atoms[atom_idx]
+        if atom.has_tetrahedral_chirality:
+            self.update_tetrahedral_chirality(atom_idx, stereo_mode=stereo_mode)
+
+    def stereo_modes_for_acceptor(self, acceptor_idx):
+        acceptor = self.atoms[acceptor_idx]
+        if acceptor.has_tetrahedral_chirality:
+            return ("retain", "invert")
+        return (None,)
+
+    #Helper: ChrimpAtom -> RDKit atom
+    def to_rdkit_mol(self, include_chirality=True):
+        rw_mol = Chem.RWMol() #creates a read-write RDKit molecule
+        # Goes through every ChrimpAtom in MoleculeSet
+        for atom in self.atoms:
+            rd_atom = Chem.Atom(atom.symbol)
+            rd_atom.SetFormalCharge(atom.charge)
+            rd_atom.SetNoImplicit(True)
+            rw_mol.AddAtom(rd_atom)
+
+        # Goes through every ChrimpBond in MoleculeSet
+        for bond in self.bonds:
+            rw_mol.AddBond(
+                bond.atom1.idx,
+                bond.atom2.idx,
+                self.rdkit_bond_type(bond.typebondint),
+            )
+
+        mol = rw_mol.GetMol() # converts the editable molecule into a normal RDKit molecule
+        mol.UpdatePropertyCache(strict=False)
+
+        if include_chirality:
+            chiral_atoms = [atom for atom in self.atoms if atom.has_tetrahedral_chirality]
+            potential_chiral_atom_indices = (
+                self.potential_tetrahedral_chiral_atom_indices(mol)
+                if chiral_atoms
+                else set()
+            )
+            # loop through ChrimpAtom
+            for atom in chiral_atoms:
+                rd_atom = mol.GetAtomWithIdx(atom.idx)
+                if atom.idx not in potential_chiral_atom_indices:
+                    continue
+
+                current_neighbors = tuple(n.GetIdx() for n in rd_atom.GetNeighbors())
+                chiral_neighbors = self.remap_chiral_neighbors_after_replacement(
+                    atom.chiral_neighbors, current_neighbors
+                )
+                if chiral_neighbors is None:
+                    continue
+
+                chiral_tag = atom.chiral_tag
+                if self.permutation_is_odd(chiral_neighbors, current_neighbors):
+                    chiral_tag = self.flip_chiral_tag(chiral_tag)
+                rd_atom.SetChiralTag(chiral_tag)
+
+        Chem.AssignStereochemistry(mol, force=True, cleanIt=False)
+        return mol
+
     @property
     def can_smiles(self):
         if self.can_smiles_ is None:
-            mol = Chem.MolFromMolBlock(self.molblock, removeHs=False, sanitize=False)
+            mol = self.to_rdkit_mol(include_chirality=True)
             Chem.Kekulize(mol, clearAromaticFlags=True)
-            h_can_smiles_ = Chem.MolToSmiles(mol)
+            h_can_smiles_ = Chem.MolToSmiles(mol, isomericSmiles=True)
             self.can_smiles_ = self.clean_smiles_artefacts(h_can_smiles_)
             if MoleculeSet.default_hydrogens_implicit:
                 self.can_smiles_ = self.rdkit_canonicalization(
@@ -342,11 +608,7 @@ class MoleculeSet:
 
     @property
     def rdkit_mol(self):
-        mol = Chem.MolFromMolBlock(self.molblock, removeHs=False, sanitize=False)
-        # Since we import with removeHs=False, Hs are explicit and every implicit H is an artifact
-        for a in mol.GetAtoms():
-            a.SetNoImplicit(True)
-        mol.UpdatePropertyCache()
+        mol = self.to_rdkit_mol(include_chirality=True)
         can_ranks = Chem.CanonicalRankAtoms(mol)
         for i, a in enumerate(mol.GetAtoms()):
             a.SetIntProp("canonical_rank", can_ranks[i])
@@ -358,7 +620,7 @@ class MoleculeSet:
         reverse_atom_map_dict = {v: k for k, v in self.atom_map_dict.items()}
         for atom in mapped_mol.GetAtoms():
             atom.SetAtomMapNum(reverse_atom_map_dict.get(atom.GetIdx(), 0))
-        return Chem.MolToSmiles(mapped_mol)
+        return Chem.MolToSmiles(mapped_mol, isomericSmiles=True)
 
     @property
     def molblock(self):
@@ -372,7 +634,8 @@ class MoleculeSet:
         # If a '*' is in the smiles, we remove it
         if "*" in smiles:
             smiles = smiles.replace("*", "")
-
+        
+        # Build an RDKit molecule from SMILES
         rdkit_mol = Chem.MolFromSmiles(smiles, sanitize=False)
         # Kekulize the molecule and add hydrogens
         Chem.Kekulize(rdkit_mol, clearAromaticFlags=True)
@@ -384,21 +647,39 @@ class MoleculeSet:
             # if atom doesn't have the smiles_explicit property, we set it to 0
             if not atom.HasProp("smiles_explicit"):
                 atom.SetProp("smiles_explicit", "0")
+        Chem.AssignStereochemistry(rdkit_mol, force=True, cleanIt=True) # assign stereochemical information
 
         already_seen_idx = []
-        atoms_list = {}
-        connections_list = []
-        bonds_list = []
+        atoms_list = {} # maps RDKit atim index -> ChrimpAtom <=> storage for converted atoms
+        connections_list = [] # stores connections as an intermediate before ChrimpBond objects are created
+        bonds_list = [] # will eventually contain the ChrimpBond objects
         atom_idx = 0
         atom_map_dict = {}
+
         for a in rdkit_mol.GetAtoms():
             if a.GetAtomMapNum() != 0:
                 atom_map_dict[a.GetAtomMapNum()] = a.GetIdx()
+
+            chiral_tag = a.GetChiralTag() # captures chirality information from parsed SMILES
+
+            #if atoms is tetrahedral -> store its neighbours
+            if chiral_tag in {
+                Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW,
+                Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CCW,
+            }:
+                chiral_neighbors = tuple(n.GetIdx() for n in a.GetNeighbors())
+            else:
+                chiral_neighbors = ()
+            
+            # For each RDKit atom a ChrimpAtom is built and stored in atoms_list
             atoms_list[a.GetIdx()] = ChrimpAtom(
                 a.GetSymbol(),
                 a.GetFormalCharge(),
                 idx=atom_idx,
                 smiles_explicit=a.GetProp("smiles_explicit") == "1",
+                chiral_tag=chiral_tag, # Stores RDKit chirality tag inside ChrimpAtom
+                chiral_neighbors=chiral_neighbors, # Stores stereo-defining neighbor indices
+
             )
             atom_idx += 1
             already_seen_idx.append(a.GetIdx())
@@ -414,7 +695,7 @@ class MoleculeSet:
         return cls(
             list(atoms_list.values()),
             bonds_list,
-            chiral=("@" in smiles),
+            chiral=any(atom.has_tetrahedral_chirality for atom in atoms_list.values()),
             atom_map_dict=atom_map_dict,
         )
 
@@ -445,10 +726,13 @@ class MoleculeSet:
         if move[0] == "i":
             new_mol_set = self.make_ionization_move(move)
         elif move[0] == "a":
+            radical_indices = [
+                atom_idx for atom_idx in move[1:] if isinstance(atom_idx, int)
+            ]
             new_mol_set = self.make_attack_move(
                 move,
                 one_e_attack=any(
-                    [self.atoms[atom_idx].radical for atom_idx in move[1:]]
+                    [self.atoms[atom_idx].radical for atom_idx in radical_indices]
                 ),
             )
         elif move[0] == "ba":
@@ -464,49 +748,28 @@ class MoleculeSet:
         return new_mol_set
 
     def make_bond_attack_move(self, move, one_e_attack: bool = False) -> "MoleculeSet":
+        stereo_mode = self.parse_attack_stereo_mode(move, "ba")
         inter_ms = (
             self.make_homocleavage_move(("hv", move[1], move[2]))
             if one_e_attack
             else self.make_ionization_move(("i", move[1], move[2]))
         )
-        return inter_ms.make_attack_move(
-            ("a", move[2], move[3]), one_e_attack=one_e_attack
+        attack_move = (
+            ("a", move[2], move[3], stereo_mode)
+            if stereo_mode is not None
+            else ("a", move[2], move[3])
         )
+        return inter_ms.make_attack_move(attack_move, one_e_attack=one_e_attack)
 
     def make_attack_move(self, move, one_e_attack: bool = False) -> "MoleculeSet":
         mol_set_copy = self.copy()
+        stereo_mode = self.parse_attack_stereo_mode(move, "a")
         idx_attacker, idx_electron_acceptor = move[1], move[2]
         attacker, acceptor = (
             mol_set_copy.atoms[idx_attacker],
             mol_set_copy.atoms[idx_electron_acceptor],
         )
-
-        # Check if a bond already exists between the two atoms
-        bond_found = False
-        for b_idx, bond in enumerate(mol_set_copy.bonds):
-            if (
-                bond.atom1.idx == idx_attacker
-                and bond.atom2.idx == idx_electron_acceptor
-            ) or (
-                bond.atom1.idx == idx_electron_acceptor
-                and bond.atom2.idx == idx_attacker
-            ):
-                bond_found = True
-                bond_idx = b_idx
-                break
-
-        if bond_found:
-            bond = mol_set_copy.bonds[bond_idx]
-            new_bond_order = bond.typebondint + 1
-            atom1, atom2 = bond.atom1, bond.atom2
-
-            mol_set_copy.bonds.remove(bond)
-            atom1.bonds.remove(bond)
-            atom2.bonds.remove(bond)
-            mol_set_copy.bonds.append(ChrimpBond(atom1, atom2, new_bond_order))
-
-        else:
-            mol_set_copy.bonds.append(ChrimpBond(attacker, acceptor, 1))
+        mol_set_copy.replace_or_create_bond(idx_attacker, idx_electron_acceptor, 1)
 
         # Update the charges of the atoms
         if not one_e_attack:
@@ -515,6 +778,18 @@ class MoleculeSet:
 
             attacker.already_used_for_donor = True
             acceptor.already_used_for_acceptor = True
+
+        acceptor_stereo_mode = stereo_mode
+        if acceptor_stereo_mode is None and acceptor.has_tetrahedral_chirality:
+            acceptor_stereo_mode = "clear"
+
+        mol_set_copy.refresh_tetrahedral_chirality(idx_attacker)
+        if acceptor_stereo_mode is not None:
+            mol_set_copy.refresh_tetrahedral_chirality(
+                idx_electron_acceptor, stereo_mode=acceptor_stereo_mode
+            )
+        else:
+            mol_set_copy.refresh_tetrahedral_chirality(idx_electron_acceptor)
 
         return mol_set_copy
 
@@ -557,6 +832,9 @@ class MoleculeSet:
             atom2.bonds.remove(bond)
             mol_set_copy.bonds.remove(bond)
             mol_set_copy.bonds.append(ChrimpBond(atom1, atom2, new_bond_order))
+
+        mol_set_copy.refresh_tetrahedral_chirality(idx_atom_1)
+        mol_set_copy.refresh_tetrahedral_chirality(idx_atom_2)
 
         return mol_set_copy
 
@@ -613,6 +891,9 @@ class MoleculeSet:
         acceptor_atom.charge -= 1
         donor_atom.already_used_for_donor = True
         acceptor_atom.already_used_for_acceptor = True
+
+        mol_set_copy.refresh_tetrahedral_chirality(idx_electron_donor)
+        mol_set_copy.refresh_tetrahedral_chirality(idx_electron_acceptor)
 
         return mol_set_copy
 
@@ -773,7 +1054,6 @@ class MoleculeSet:
     def all_legal_attack_moves(self, donor_idx=None):
         # An attack move has the form: ('a', idx_attacker, idx_electron_acceptor)
         a_moves = []
-        # TODO if accepting end is chiral, one need to account for that and add two moves (inversion and double-inversion)
         for atom, other_atom in product(self.atoms, self.atoms):
             if donor_idx is None or donor_idx == atom.idx:
                 if (
@@ -782,7 +1062,12 @@ class MoleculeSet:
                     and not atom.already_used_for_donor
                     and not other_atom.already_used_for_acceptor
                 ):
-                    a_moves.append(("a", atom.idx, other_atom.idx))
+                    for stereo_mode in self.stereo_modes_for_acceptor(other_atom.idx):
+                        a_moves.append(
+                            ("a", atom.idx, other_atom.idx)
+                            if stereo_mode is None
+                            else ("a", atom.idx, other_atom.idx, stereo_mode)
+                        )
         return a_moves
 
     def all_legal_bond_attack_moves(
@@ -833,9 +1118,20 @@ class MoleculeSet:
                                 or attacker.already_used_for_acceptor
                                 or attacker.already_used_for_donor
                             ):
-                                ba_moves.append(
-                                    ("ba", donor.idx, attacker.idx, acceptor.idx)
-                                )
+                                for stereo_mode in self.stereo_modes_for_acceptor(
+                                    acceptor.idx
+                                ):
+                                    ba_moves.append(
+                                        ("ba", donor.idx, attacker.idx, acceptor.idx)
+                                        if stereo_mode is None
+                                        else (
+                                            "ba",
+                                            donor.idx,
+                                            attacker.idx,
+                                            acceptor.idx,
+                                            stereo_mode,
+                                        )
+                                    )
         return ba_moves
 
     def calc_molblock(self, vts_is_uranium=False):
@@ -1161,17 +1457,60 @@ class MoleculeSet:
         Chem.Kekulize(rdkit_mol, clearAromaticFlags=True)
 
         arrows = []
+        stereo_events = []
+        broken_bonds_by_atom = defaultdict(list)
+
+        def validate_stereo_mode(stereo_mode):
+            if stereo_mode not in self.attack_stereo_modes:
+                raise ValueError(f"Invalid stereo mode: {stereo_mode!r}")
+
         for m in move:
             if m[0] == "a":
-                arrows.append((m[1], m[2]))
+                if len(m) == 3:
+                    arrows.append((m[1], m[2]))
+                elif len(m) == 4:
+                    validate_stereo_mode(m[3])
+                    arrows.append((m[1], m[2]))
+                    stereo_events.append((m[2], m[3], m[1]))
+                else:
+                    raise ValueError(f"Invalid attack move shape: {m!r}")
             elif m[0] == "i":
                 arrows.append(((m[1], m[2]), m[2]))
+                broken_bonds_by_atom[m[1]].append(m[2])
+                broken_bonds_by_atom[m[2]].append(m[1])
             elif m[0] == "ba":
-                arrows.append(((m[1], m[2]), m[3]))
+                if len(m) == 4:
+                    arrows.append(((m[1], m[2]), m[3]))
+                elif len(m) == 5:
+                    validate_stereo_mode(m[4])
+                    arrows.append(((m[1], m[2]), m[3]))
+                    stereo_events.append((m[3], m[4], m[2]))
+                else:
+                    raise ValueError(f"Invalid bond-attack move shape: {m!r}")
             else:
                 raise NotImplementedError(
                     "In 'move_mechsmiles', only moves of types 'a', 'i' and 'ba' are considered for now"
                 )
+
+        stereo_updates = []
+        stereo_update_indices = {}
+        broken_bond_cursors = defaultdict(int)
+        for center_idx, stereo_mode, new_ligand_idx in stereo_events:
+            ligand_pairs = ()
+            if stereo_mode not in {"clear", "unknown"}:
+                broken_ligands = broken_bonds_by_atom.get(center_idx, [])
+                while broken_bond_cursors[center_idx] < len(broken_ligands):
+                    old_ligand_idx = broken_ligands[broken_bond_cursors[center_idx]]
+                    broken_bond_cursors[center_idx] += 1
+                    if old_ligand_idx != new_ligand_idx:
+                        ligand_pairs = ((old_ligand_idx, new_ligand_idx),)
+                        break
+
+            stereo_key = (center_idx, stereo_mode)
+            if stereo_key not in stereo_update_indices:
+                stereo_update_indices[stereo_key] = len(stereo_updates)
+                stereo_updates.append([center_idx, stereo_mode, []])
+            stereo_updates[stereo_update_indices[stereo_key]][2].extend(ligand_pairs)
 
         for i, atom in enumerate(rdkit_mol.GetAtoms()):
             atom.SetAtomMapNum(i + 1)
@@ -1183,20 +1522,55 @@ class MoleculeSet:
             if isinstance(tup, int):
                 all_used_indices.add(tup + 1)
                 return tup + 1
+            elif isinstance(tup, str):
+                return tup
             elif isinstance(tup, tuple):
                 return tuple(increment_tuple(i) for i in tup)
 
         pre_final_arrows = [increment_tuple(arrow) for arrow in arrows]
+
+        pre_final_stereo_updates = []
+        for center_idx, stereo_mode, ligand_pairs in stereo_updates:
+            center_idx += 1
+            all_used_indices.add(center_idx)
+            incremented_pairs = []
+            for old_ligand_idx, new_ligand_idx in ligand_pairs:
+                old_ligand_idx += 1
+                new_ligand_idx += 1
+                all_used_indices.add(old_ligand_idx)
+                all_used_indices.add(new_ligand_idx)
+                incremented_pairs.append((old_ligand_idx, new_ligand_idx))
+            pre_final_stereo_updates.append(
+                (center_idx, stereo_mode, tuple(incremented_pairs))
+            )
+
         lower_int_convert = {k: (i + 1) for i, k in enumerate(all_used_indices)}
 
         def convert_tuple(tup, dic):
             if isinstance(tup, int):
                 return dic[tup]
+            elif isinstance(tup, str):
+                return tup
             elif isinstance(tup, tuple):
                 return tuple(convert_tuple(i, dic) for i in tup)
 
         final_arrows = [
             convert_tuple(arrow, lower_int_convert) for arrow in pre_final_arrows
+        ]
+
+        final_stereo_updates = [
+            (
+                lower_int_convert[center_idx],
+                stereo_mode,
+                tuple(
+                    (
+                        lower_int_convert[old_ligand_idx],
+                        lower_int_convert[new_ligand_idx],
+                    )
+                    for old_ligand_idx, new_ligand_idx in ligand_pairs
+                ),
+            )
+            for center_idx, stereo_mode, ligand_pairs in pre_final_stereo_updates
         ]
 
         for idx_atom, atom in enumerate(rdkit_mol.GetAtoms()):
@@ -1218,6 +1592,26 @@ class MoleculeSet:
         rdkit_mol = rwmol.GetMol()
 
         mech_smiles_string = f"{Chem.MolToSmiles(rdkit_mol, kekuleSmiles=True)}|{';'.join([str(a) for a in final_arrows])}"
+        if final_stereo_updates:
+            def format_stereo_update(center_idx, stereo_mode, ligand_pairs):
+                if ligand_pairs:
+                    pairs_string = (
+                        "("
+                        + ",".join(
+                            f"({old_ligand_idx},{new_ligand_idx})"
+                            for old_ligand_idx, new_ligand_idx in ligand_pairs
+                        )
+                        + ("," if len(ligand_pairs) == 1 else "")
+                        + ")"
+                    )
+                else:
+                    pairs_string = "()"
+                return f"TH({center_idx},{stereo_mode!r},{pairs_string})"
+
+            mech_smiles_string += "|" + ";".join(
+                format_stereo_update(center_idx, stereo_mode, ligand_pairs)
+                for center_idx, stereo_mode, ligand_pairs in final_stereo_updates
+            )
         # print(f"{Fore.GREEN}MechSmiles string: {mech_smiles_string}{Fore.RESET}")
         return mech_smiles_string
 
