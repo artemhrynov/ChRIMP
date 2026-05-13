@@ -596,13 +596,10 @@ class MechSmiles:
                     tup[2],
                 )
             raise ValueError(
-<<<<<<< HEAD
-                "Attack move must have format (a, b) or (a, b, 'mix'|'invert'|'clear'|'unknown')"
+                "Attack move must have format (a, b). "
+                "Stereo modes must be encoded with TH(center,'mode',ligand_replacements), "
+                "where mode is 'invert', 'mix', 'clear', or 'unknown'."
             )
-=======
-            
->>>>>>> 92455c3 (Updating raise ValueError)
-
         elif isinstance(tup[0], tuple):
             # If tup[0][1] == tup[1], it's a ionization move
             if not len(tup[0]) == 2:
