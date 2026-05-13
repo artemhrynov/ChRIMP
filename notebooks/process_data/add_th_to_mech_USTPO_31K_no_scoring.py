@@ -87,7 +87,9 @@ def canonical_unmapped_smiles(
 
 
 def canonical_component_counter(
-    smiles: str, uncharge: bool = False
+    smiles: str,
+    uncharge: bool = False,
+    isomeric: bool = True,
 ) -> Counter[str] | None:
     canonical = canonical_unmapped_smiles(smiles, uncharge=uncharge)
     if canonical is None:
