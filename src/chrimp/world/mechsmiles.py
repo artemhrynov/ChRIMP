@@ -153,7 +153,7 @@ class MechSmiles:
         if not isinstance(ligand_pairs, tuple):
             raise ValueError("Stereo update ligand replacements must be a tuple")
 
-        if stereo_mode in {"clear", "unknown"} and ligand_pairs:
+        if stereo_mode in {"clear", "unknown", "mix"} and ligand_pairs:
             raise ValueError(
                 f"Stereo mode {stereo_mode!r} must use empty ligand replacements: ()"
             )
