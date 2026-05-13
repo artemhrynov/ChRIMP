@@ -53,7 +53,11 @@ def split_mech_smi(mech_smi: str) -> tuple[str, str, str]:
     return smiles, arrows, stereo
 
 
-def canonical_unmapped_smiles(smiles: str, uncharge: bool = False) -> str | None:
+def canonical_unmapped_smiles(
+    smiles: str,
+    uncharge: bool = False,
+    isomeric: bool = True,
+) -> str | None:
     if not isinstance(smiles, str) or not smiles:
         return ""
 
