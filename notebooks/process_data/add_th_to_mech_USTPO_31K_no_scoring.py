@@ -81,7 +81,11 @@ def canonical_unmapped_smiles(
             return None
 
     try:
-        return Chem.MolToSmiles(mol, isomericSmiles=True, canonical=True)
+        return Chem.MolToSmiles(
+            mol,
+            isomericSmiles=isomeric,
+            canonical=True,
+        )
     except Exception:
         return None
 
