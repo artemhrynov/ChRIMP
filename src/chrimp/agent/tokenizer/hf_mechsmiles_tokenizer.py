@@ -29,7 +29,7 @@ def create_tokenizer():
 
     vocab = {tok: idx for idx, tok in enumerate(base_tokens)}
 
-    SMI_REGEX_PATTERN = r"""(TH|'(?:invert|retain|clear|unknown)'|\[[a-z]+]|\[[A-Z][a-z]?|Br?|Cl?|N|O|S|P|F|I|H[2-4]?|\[|\]|,|;|\(|\)|\.|=|\#|-|\+|\\|/|:|~|@|\?|>|\*|\$|%|(?<=%)[0-9]{2}|(?<=,)[0-9]{2}(?=\))|(?<=\()[0-9]{2}(?=,)|(?<=:)[0-9]{2}(?=\])|[0-9]|\|)"""
+    SMI_REGEX_PATTERN = r"""(TH|'(?:invert|mix|clear|unknown)'|\[[a-z]+]|\[[A-Z][a-z]?|Br?|Cl?|N|O|S|P|F|I|H[2-4]?|\[|\]|,|;|\(|\)|\.|=|\#|-|\+|\\|/|:|~|@|\?|>|\*|\$|%|(?<=%)[0-9]{2}|(?<=,)[0-9]{2}(?=\))|(?<=\()[0-9]{2}(?=,)|(?<=:)[0-9]{2}(?=\])|[0-9]|\|)"""
     # Very condensed notation of:
     # regex = re.compile(
     #    r"""(

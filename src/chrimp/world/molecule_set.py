@@ -473,7 +473,7 @@ class MoleculeSet:
                     )
             center.clear_tetrahedral_chirality()
             self.chiral = any(atom.has_tetrahedral_chirality for atom in self.atoms) # after you potentially cleaned this atom, is the molecule still chiral
-            return False
+            return stereo_mode in {"mix", "clear", "unknown"}
 
         if not center.has_tetrahedral_chirality:
             return False # this means that the function cannot yet support newly created stereocentres
