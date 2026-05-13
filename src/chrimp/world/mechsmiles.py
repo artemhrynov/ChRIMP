@@ -626,7 +626,9 @@ class MechSmiles:
                     tup[2],
                 )
             raise ValueError(
-                "Bond-attack move must have format ((a, b), c) or ((a, b), c, 'mix'|'invert'|'clear'|'unknown')"
+                "Bond-attack move must have format ((a, b), c). "
+                "Stereo modes must be encoded with TH(center,'mode',ligand_replacements), "
+                "where mode is 'invert', 'mix', 'clear', or 'unknown'."
             )
 
         elif isinstance(tup[0], str) and tup[0] == "hv":
