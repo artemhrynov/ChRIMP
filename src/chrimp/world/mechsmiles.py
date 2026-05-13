@@ -596,8 +596,12 @@ class MechSmiles:
                     tup[2],
                 )
             raise ValueError(
+<<<<<<< HEAD
                 "Attack move must have format (a, b) or (a, b, 'mix'|'invert'|'clear'|'unknown')"
             )
+=======
+            
+>>>>>>> 92455c3 (Updating raise ValueError)
 
         elif isinstance(tup[0], tuple):
             # If tup[0][1] == tup[1], it's a ionization move
