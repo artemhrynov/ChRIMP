@@ -260,6 +260,6 @@ $
 [unk]
 TH
 'invert'
-'retain'
+'mix'
 'clear'
 'unknown'
