@@ -280,7 +280,7 @@ class MoleculeSet:
     default_treat_Br_I_2nd_period = False  # bool
     default_treat_P_S_Cl_12_electrons = True  # bool
     default_authorize_radicals = True  # bool
-    attack_stereo_modes = {"retain", "invert", "unknown", "clear"}
+    attack_stereo_modes = {"invert", "mix", "unknown", "clear"}
 
     def __init__(
         self, atoms, bonds, chiral: Optional[bool] = None, atom_map_dict: dict = {}
@@ -408,29 +408,75 @@ class MoleculeSet:
         remapped_order[remapped_order.index(removed_neighbors[0])] = added_neighbors[0]
         return tuple(remapped_order)
 
-    def update_tetrahedral_chirality(
-        self, center_idx, ligand_replacements=None, stereo_mode="retain"
+    def atom_neighbor_indices(self, atom_idx):
+        neighbors = []
+        atom = self.atoms[atom_idx]
+        for bond in atom.bonds:
+            neighbor = bond.atom2 if bond.atom1 is atom else bond.atom1
+            neighbors.append(neighbor.idx)
+        return tuple(neighbors)
+
+    def is_trigonal_planar_to_tetrahedral_addition(
+        self, center_idx, incoming_ligand_idx
     ):
-        """Update a tetrahedral stereo frame after one or more ligand changes."""
-        valid_stereo_modes = {"retain", "invert", "unknown", "clear"}
-        if stereo_mode not in valid_stereo_modes:
+        center = self.atoms[center_idx]
+        current_neighbors = self.atom_neighbor_indices(center_idx)
+        if (
+            center.has_tetrahedral_chirality
+            or len(current_neighbors) != 3
+            or incoming_ligand_idx in current_neighbors
+        ):
+            return False
+
+        probe_ms = self.copy()
+        probe_ms.replace_or_create_bond(incoming_ligand_idx, center_idx, 1)
+        probe_mol = probe_ms.to_rdkit_mol(include_chirality=False)
+        return center_idx in probe_ms.potential_tetrahedral_chiral_atom_indices(
+            probe_mol
+        )
+
+    def update_tetrahedral_chirality(
+        self, center_idx, ligand_replacements=None, stereo_mode=None
+    ):
+        """Update a tetrahedral stereo frame after one or more ligand changes.
+
+        ``stereo_mode=None`` is the internal "preserve the stored frame" path.
+        Explicit modes are reserved for chemically meaningful annotations.
+        """
+        valid_stereo_modes = self.attack_stereo_modes
+        if stereo_mode is not None and stereo_mode not in valid_stereo_modes:
             raise ValueError(
-                f"stereo_mode must be one of {sorted(valid_stereo_modes)}, "
+                f"stereo_mode must be None or one of {sorted(valid_stereo_modes)}, "
                 f"got {stereo_mode!r}"
             )
 
         center = self.atoms[center_idx] 
-        if not center.has_tetrahedral_chirality:
-            return False # this means that the function cannot yet support newly created stereocentres
-
         self.molblock_ = None
         self.can_smiles_ = None
         self.repr_ = None
 
-        if stereo_mode in {"unknown", "clear"}:
+        if stereo_mode in {"unknown", "clear", "mix"}:
+            if stereo_mode == "mix":
+                if center.has_tetrahedral_chirality:
+                    raise ValueError(
+                        "Stereo mode 'mix' is only valid when creating a new "
+                        "tetrahedral center from a three-ligand center"
+                    )
+                if ligand_replacements:
+                    raise ValueError(
+                        "Stereo mode 'mix' must use empty ligand replacements"
+                    )
+                if len(self.atom_neighbor_indices(center_idx)) != 4:
+                    raise ValueError(
+                        "Stereo mode 'mix' requires the center to have four "
+                        "ligands after the move"
+                    )
             center.clear_tetrahedral_chirality()
             self.chiral = any(atom.has_tetrahedral_chirality for atom in self.atoms) # after you potentially cleaned this atom, is the molecule still chiral
             return False
+
+        if not center.has_tetrahedral_chirality:
+            return False # this means that the function cannot yet support newly created stereocentres
 
         ligand_replacements = dict(ligand_replacements or {})
         mol = self.to_rdkit_mol(include_chirality=False) #rebuilds rdkit molecule, without considering stored chirality
@@ -532,15 +578,22 @@ class MoleculeSet:
 
         return bond_idx
 
-    def refresh_tetrahedral_chirality(self, atom_idx, stereo_mode="retain"):
+    def refresh_tetrahedral_chirality(self, atom_idx, stereo_mode=None):
         atom = self.atoms[atom_idx]
-        if atom.has_tetrahedral_chirality:
+        if atom.has_tetrahedral_chirality or stereo_mode in {"unknown", "clear", "mix"}:
             self.update_tetrahedral_chirality(atom_idx, stereo_mode=stereo_mode)
 
-    def stereo_modes_for_acceptor(self, acceptor_idx):
+    def stereo_modes_for_acceptor(self, acceptor_idx, incoming_ligand_idx=None):
         acceptor = self.atoms[acceptor_idx]
         if acceptor.has_tetrahedral_chirality:
-            return ("retain", "invert")
+            return ("invert",)
+        if (
+            incoming_ligand_idx is not None
+            and self.is_trigonal_planar_to_tetrahedral_addition(
+                acceptor_idx, incoming_ligand_idx
+            )
+        ):
+            return ("mix",)
         return (None,)
 
     #Helper: ChrimpAtom -> RDKit atom
@@ -765,6 +818,13 @@ class MoleculeSet:
         mol_set_copy = self.copy()
         stereo_mode = self.parse_attack_stereo_mode(move, "a")
         idx_attacker, idx_electron_acceptor = move[1], move[2]
+        if stereo_mode == "mix" and not self.is_trigonal_planar_to_tetrahedral_addition(
+            idx_electron_acceptor, idx_attacker
+        ):
+            raise ValueError(
+                "Stereo mode 'mix' is only valid when an attack creates a "
+                "four-ligand center from a three-ligand center"
+            )
         attacker, acceptor = (
             mol_set_copy.atoms[idx_attacker],
             mol_set_copy.atoms[idx_electron_acceptor],
@@ -1062,7 +1122,9 @@ class MoleculeSet:
                     and not atom.already_used_for_donor
                     and not other_atom.already_used_for_acceptor
                 ):
-                    for stereo_mode in self.stereo_modes_for_acceptor(other_atom.idx):
+                    for stereo_mode in self.stereo_modes_for_acceptor(
+                        other_atom.idx, atom.idx
+                    ):
                         a_moves.append(
                             ("a", atom.idx, other_atom.idx)
                             if stereo_mode is None
@@ -1119,7 +1181,7 @@ class MoleculeSet:
                                 or attacker.already_used_for_donor
                             ):
                                 for stereo_mode in self.stereo_modes_for_acceptor(
-                                    acceptor.idx
+                                    acceptor.idx, attacker.idx
                                 ):
                                     ba_moves.append(
                                         ("ba", donor.idx, attacker.idx, acceptor.idx)
@@ -1497,7 +1559,7 @@ class MoleculeSet:
         broken_bond_cursors = defaultdict(int)
         for center_idx, stereo_mode, new_ligand_idx in stereo_events:
             ligand_pairs = ()
-            if stereo_mode not in {"clear", "unknown"}:
+            if stereo_mode not in {"clear", "unknown", "mix"}:
                 broken_ligands = broken_bonds_by_atom.get(center_idx, [])
                 while broken_bond_cursors[center_idx] < len(broken_ligands):
                     old_ligand_idx = broken_ligands[broken_bond_cursors[center_idx]]
