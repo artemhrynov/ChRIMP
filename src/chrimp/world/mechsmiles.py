@@ -596,7 +596,7 @@ class MechSmiles:
                     tup[2],
                 )
             raise ValueError(
-                "Attack move must have format (a, b) or (a, b, 'retain'|'invert'|'clear'|'unknown')"
+                "Attack move must have format (a, b) or (a, b, 'mix'|'invert'|'clear'|'unknown')"
             )
 
         elif isinstance(tup[0], tuple):
@@ -625,7 +625,7 @@ class MechSmiles:
                     tup[2],
                 )
             raise ValueError(
-                "Bond-attack move must have format ((a, b), c) or ((a, b), c, 'retain'|'invert'|'clear'|'unknown')"
+                "Bond-attack move must have format ((a, b), c) or ((a, b), c, 'mix'|'invert'|'clear'|'unknown')"
             )
 
         elif isinstance(tup[0], str) and tup[0] == "hv":

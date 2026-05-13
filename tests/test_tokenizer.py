@@ -11,19 +11,19 @@ TOKENIZER_PATHS = [
 
 STEREO_MODE_EXAMPLES = [
     ("TH(1,'invert',((5,6),))", "'invert'"),
-    ("TH(1,'retain',((5,6),))", "'retain'"),
+    ("TH(1,'mix',((5,6),))", "'mix'"),
     ("TH(1,'clear',())", "'clear'"),
     ("TH(1,'unknown',())", "'unknown'"),
 ]
 
 FULL_MECHSMILES_EXAMPLES = [
     "[C@:1]([F:2])([Cl:3])([Br:4])[I:5]|(6,1)|TH(1,'invert',((5,6),))",
-    "[OH-:1].[C@:2]([H:3])([Cl:4])[Br:5]|(1,2)|TH(2,'retain',((5,1),))",
+    "[OH-:1].[C@:2]([H:3])([Cl:4])[Br:5]|(1,2)|TH(2,'mix',((5,1),))",
     "[C@:1]([F:2])([Cl:3])([Br:4])[I:5]|((2,3),1)|TH(1,'invert',((4,6),))",
     "[OH-:1].[C@:2]([H:3])([Cl:4])[Br:5]|(1,2);((2,5),5)|TH(2,'invert',((5,1),))",
     "[C@:1]([F:2])([Cl:3])([Br:4])[I:5]|(6,1)|TH(1,'clear',())",
     "[C@:1]([F:2])([Cl:3])([Br:4])[I:5]|(6,1)|TH(1,'unknown',())",
-    "F[C@:1]([Cl:2])([Br:3])[I:4]|(5,1)|TH(1,'retain',((4,5),))",
+    "F[C@:1]([Cl:2])([Br:3])[I:4]|(5,1)|TH(1,'mix',((4,5),))",
     "F[C@@:1]([Cl:2])([Br:3])[I:4]|(5,1)|TH(1,'invert',((4,5),))",
 ]
 
@@ -41,7 +41,7 @@ def test_tokenizer_vocab_contains_tetrahedral_stereo_tokens(tokenizer):
     expected_tokens = [
         "TH",
         "'invert'",
-        "'retain'",
+        "'mix'",
         "'clear'",
         "'unknown'",
     ]

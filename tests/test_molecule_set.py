@@ -32,12 +32,12 @@ class TestMoleculeSet:
 
     def test_mix_replaces_retain_in_attack_stereo_modes(self):
         assert "mix" in MoleculeSet.attack_stereo_modes
-        assert "retain" not in MoleculeSet.attack_stereo_modes
+        assert "mix" not in MoleculeSet.attack_stereo_modes
 
         ms = MoleculeSet.from_smiles("F[P@](Cl)(Br)I")
 
         with pytest.raises(ValueError):
-            ms.make_move(("a", 2, 1, "retain"))
+            ms.make_move(("a", 2, 1, "mix"))
 
     def test_mix_mode_is_used_for_trigonal_planar_to_tetrahedral_attack(self):
         ms = MoleculeSet.from_smiles("N.P(F)(Cl)Br")

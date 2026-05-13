@@ -38,7 +38,7 @@ LEGACY_TEST_CASES = [
 CANONICAL_STEREO_EXAMPLES = [
     (
         "[F:1][P@:2]([Cl:3])([Br:4])[I:5].[O-:6]"
-        "|(6,2);((2,5),5)|TH(2,'retain',((5,6),))"
+        "|(6,2);((2,5),5)|TH(2,'mix',((5,6),))"
     ),
     (
         "[F:1][P@:2]([Cl:3])([Br:4])[I:5].[O-:6]"
@@ -56,7 +56,7 @@ CANONICAL_STEREO_EXAMPLES = [
 
 
 PUBLIC_STEREO_MODE_TOKENS = [
-    "'retain'",
+    "'mix'",
     "'invert'",
     "'clear'",
     "'unknown'",
@@ -165,7 +165,7 @@ def test_process_smiles_arrow_supports_plain_bond_attack():
     "stereo_string, expected",
     [
         ("TH(2,'invert',((5,6),))", (2, "invert", ((5, 6),))),
-        ("TH(2,'retain',((5,6),))", (2, "retain", ((5, 6),))),
+        ("TH(2,'mix',((5,6),))", (2, "mix", ((5, 6),))),
         ("TH(2,'clear',())", (2, "clear", ())),
         ("TH(2,'unknown',())", (2, "unknown", ())),
     ],
@@ -198,8 +198,8 @@ def test_format_stereo_update_uses_canonical_TH_format():
     )
 
     assert (
-        MechSmiles.format_stereo_update(2, "retain", ((5, 6), (7, 8)))
-        == "TH(2,'retain',((5,6),(7,8)))"
+        MechSmiles.format_stereo_update(2, "mix", ((5, 6), (7, 8)))
+        == "TH(2,'mix',((5,6),(7,8)))"
     )
 
     assert MechSmiles.format_stereo_update(2, "clear", ()) == "TH(2,'clear',())"
@@ -306,12 +306,12 @@ def test_TH_retain_and_invert_preserve_different_chiral_products_after_ligand_ch
         "|(6,2);((2,5),5)"
     )
 
-    retained = MechSmiles(base + "|TH(2,'retain',((5,6),))").prod
+    mixed = MechSmiles(base + "|TH(2,'mix',((5,6),))").prod
     inverted = MechSmiles(base + "|TH(2,'invert',((5,6),))").prod
 
-    assert "@" in retained
+    assert "@" in mixed
     assert "@" in inverted
-    assert retained != inverted
+    assert mixed != inverted
 
 
 def test_TH_clear_removes_chirality():
@@ -326,21 +326,21 @@ def test_TH_clear_removes_chirality():
 def test_TH_retain_and_invert_work_without_ligand_replacement():
     base = "[Cl:1][P@:2]([F:3])([Br:4])[I:5]|(1,2)"
 
-    retained = MechSmiles(base + "|TH(2,'retain',())").prod
+    mixed = MechSmiles(base + "|TH(2,'mix',())").prod
     inverted = MechSmiles(base + "|TH(2,'invert',())").prod
 
-    assert "@" in retained
+    assert "@" in mixed
     assert "@" in inverted
-    assert retained != inverted
+    assert mixed != inverted
 
 
 @pytest.mark.parametrize(
     "bad_public_msmi",
     [
         "[Cl:1][P@:2]([F:3])([Br:4])[I:5]|(1,2,'invert')",
-        "[Cl:1][P@:2]([F:3])([Br:4])[I:5]|(1,2,'retain')",
+        "[Cl:1][P@:2]([F:3])([Br:4])[I:5]|(1,2,'mix')",
         "[CH2:1]=[CH:2][P@:3]([F:4])([Cl:5])[Br:6]|((1,2),3,'invert')",
-        "[CH2:1]=[CH:2][P@:3]([F:4])([Cl:5])[Br:6]|((1,2),3,'retain')",
+        "[CH2:1]=[CH:2][P@:3]([F:4])([Cl:5])[Br:6]|((1,2),3,'mix')",
     ],
 )
 def test_public_arrow_field_rejects_stereo_mode_tokens(bad_public_msmi):

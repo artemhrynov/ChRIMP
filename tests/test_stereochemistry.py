@@ -30,7 +30,7 @@ def replace_ligands(
     ms,
     center_idx,
     replacements,
-    stereo_mode="retain",
+    stereo_mode="mix",
     update_chirality=True,
     return_replacement_map=False,
 ):
@@ -166,11 +166,11 @@ def test_tracks_tetrahedral_chirality_after_multiple_ligand_replacements():
 
 
 def test_can_invert_tetrahedral_chirality_after_multiple_ligand_replacements():
-    retained = replace_ligands(
+    mixed = replace_ligands(
         MoleculeSet.from_smiles("F[C@](Cl)(Br)I"),
         1,
         [(0, "H"), (2, "F")],
-        stereo_mode="retain",
+        stereo_mode="mix",
     )
     inverted = replace_ligands(
         MoleculeSet.from_smiles("F[C@](Cl)(Br)I"),
@@ -179,9 +179,9 @@ def test_can_invert_tetrahedral_chirality_after_multiple_ligand_replacements():
         stereo_mode="invert",
     )
 
-    assert "@" in retained.can_smiles
+    assert "@" in mixed.can_smiles
     assert "@" in inverted.can_smiles
-    assert retained.can_smiles != inverted.can_smiles
+    assert mixed.can_smiles != inverted.can_smiles
 
 
 def test_drops_chirality_after_multiple_replacements_with_duplicate_ligands():
@@ -215,7 +215,7 @@ def test_update_tetrahedral_chirality_handles_all_four_ligand_replacements_with_
     result = product.update_tetrahedral_chirality(
         1,
         ligand_replacements=replacement_map,
-        stereo_mode="retain",
+        stereo_mode="mix",
     )
 
     assert result is True
@@ -241,7 +241,7 @@ def test_update_tetrahedral_chirality_drops_all_four_ligand_replacements_without
 
     result = product.update_tetrahedral_chirality(
         1,
-        stereo_mode="retain",
+        stereo_mode="mix",
     )
 
     assert result is False
@@ -250,7 +250,7 @@ def test_update_tetrahedral_chirality_drops_all_four_ligand_replacements_without
 
 
 def test_update_tetrahedral_chirality_can_invert_after_all_four_ligand_replacements():
-    retained = replace_ligands(
+    mixed = replace_ligands(
         MoleculeSet.from_smiles("F[C@](Cl)(Br)I"),
         1,
         [
@@ -259,7 +259,7 @@ def test_update_tetrahedral_chirality_can_invert_after_all_four_ligand_replaceme
             (3, "I"),
             (4, "F"),
         ],
-        stereo_mode="retain",
+        stereo_mode="mix",
     )
 
     inverted = replace_ligands(
@@ -274,20 +274,20 @@ def test_update_tetrahedral_chirality_can_invert_after_all_four_ligand_replaceme
         stereo_mode="invert",
     )
 
-    assert "@" in retained.can_smiles
+    assert "@" in mixed.can_smiles
     assert "@" in inverted.can_smiles
-    assert retained.can_smiles != inverted.can_smiles
+    assert mixed.can_smiles != inverted.can_smiles
 
 
 def test_attack_move_on_chiral_acceptor_can_retain_or_invert():
     ms = MoleculeSet.from_smiles("F[P@](Cl)(Br)I")
 
-    retained = ms.make_move(("a", 2, 1, "retain"))
+    mixed = ms.make_move(("a", 2, 1, "mix"))
     inverted = ms.make_move(("a", 2, 1, "invert"))
 
-    assert retained.can_smiles == "[F][P@](=[Cl])([Br])[I]"
+    assert mixed.can_smiles == "[F][P@](=[Cl])([Br])[I]"
     assert inverted.can_smiles == "[F][P@@](=[Cl])([Br])[I]"
-    assert retained.can_smiles != inverted.can_smiles
+    assert mixed.can_smiles != inverted.can_smiles
 
 
 def test_legacy_attack_move_on_chiral_acceptor_clears_stereo():
@@ -303,10 +303,10 @@ def test_attack_move_on_nonchiral_acceptor_is_unchanged_by_stereo_annotation():
     ms = MoleculeSet.from_smiles("FP(Cl)(Br)I")
 
     legacy = ms.make_move(("a", 2, 1))
-    retained = ms.make_move(("a", 2, 1, "retain"))
+    mixed = ms.make_move(("a", 2, 1, "mix"))
     inverted = ms.make_move(("a", 2, 1, "invert"))
 
-    assert legacy.can_smiles == retained.can_smiles
+    assert legacy.can_smiles == mixed.can_smiles
     assert legacy.can_smiles == inverted.can_smiles
 
 
@@ -319,22 +319,22 @@ def test_all_legal_attack_moves_enumerate_retain_and_invert_for_chiral_acceptor(
         if move[0] == "a" and move[1] == 2 and move[2] == 1
     }
 
-    assert ("a", 2, 1, "retain") in moves
+    assert ("a", 2, 1, "mix") in moves
     assert ("a", 2, 1, "invert") in moves
 
 
 def test_bond_attack_move_on_chiral_acceptor_can_retain_or_invert():
     ms = MoleculeSet.from_smiles("C=C[P@](F)(Cl)Br")
 
-    retained = ms.make_move(("ba", 0, 1, 2, "retain"))
+    mixed = ms.make_move(("ba", 0, 1, 2, "mix"))
     inverted = ms.make_move(("ba", 0, 1, 2, "invert"))
 
-    assert retained.can_smiles == "[CH2]C=[P@](F)(Cl)Br"
+    assert mixed.can_smiles == "[CH2]C=[P@](F)(Cl)Br"
     assert inverted.can_smiles == "[CH2]C=[P@@](F)(Cl)Br"
-    assert retained.can_smiles != inverted.can_smiles
+    assert mixed.can_smiles != inverted.can_smiles
 
 
-def test_all_legal_bond_attack_moves_enumerate_retain_and_invert_for_chiral_acceptor():
+def test_all_legal_bond_attack_moves_enumerate_mix_and_invert_for_chiral_acceptor():
     ms = MoleculeSet.from_smiles("C=C[P@](F)(Cl)Br")
 
     moves = {
@@ -343,5 +343,5 @@ def test_all_legal_bond_attack_moves_enumerate_retain_and_invert_for_chiral_acce
         if move[0] == "ba" and move[1] == 0 and move[2] == 1 and move[3] == 2
     }
 
-    assert ("ba", 0, 1, 2, "retain") in moves
+    assert ("ba", 0, 1, 2, "mix") in moves
     assert ("ba", 0, 1, 2, "invert") in moves
