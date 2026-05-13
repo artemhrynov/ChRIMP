@@ -41,7 +41,8 @@ DEFAULT_OUTPUT = Path("data/preprocessed/mech_uspto_31k_with_th.csv")
 @dataclass(frozen=True)
 class StereoEvent:
     center_map: int
-    ligand_pairs: tuple[tuple[int, int], ...]
+    kind: str
+    ligand_pairs: tuple[tuple[int, int], ...] = ()
 
 
 def split_mech_smi(mech_smi: str) -> tuple[str, str, str]:
