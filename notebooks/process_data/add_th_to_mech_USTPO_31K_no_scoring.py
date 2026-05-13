@@ -249,7 +249,7 @@ def infer_th_mech_smi(mech_smi: str, target_smiles: str) -> tuple[str, str]:
     if not events:
         return mech_smi, "no_chiral_acceptor"
 
-    mode_options = ("retain", "invert", "clear")
+    mode_options = ("mix", "invert", "clear")
     matches: list[tuple[str, tuple[str, ...]]] = []
 
     for modes in product(mode_options, repeat=len(events)):
