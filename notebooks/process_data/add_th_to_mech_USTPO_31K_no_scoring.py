@@ -244,8 +244,7 @@ def candidate_matches(candidate_mech_smi: str, target_counter: Counter[str]) -> 
 
 
 def infer_th_mech_smi(mech_smi: str, target_smiles: str) -> tuple[str, str]:
-    if "@" not in mech_smi:
-        return mech_smi, "no_input_stereo"
+    
 
     target_counter = canonical_component_counter(target_smiles)
     if target_counter is None:
