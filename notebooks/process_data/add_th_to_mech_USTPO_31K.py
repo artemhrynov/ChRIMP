@@ -21,7 +21,7 @@ import argparse
 import os
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from itertools import productb
+from itertools import product
 from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", "/private/tmp/matplotlib")
@@ -274,7 +274,7 @@ def infer_th_mech_smi(mech_smi: str, target_smiles: str) -> tuple[str, str]:
 
     # Keep the search small and explicit. Multiple simultaneous chiral acceptors
     # are rare, but the Cartesian product handles them when they do appear.
-    mode_options = ("retain", "invert", "clear")
+    mode_options = ("invert", "clear")
     best: tuple[int, int, int, str, tuple[str, ...]] | None = None
 
     for modes in product(mode_options, repeat=len(events)):
@@ -287,7 +287,7 @@ def infer_th_mech_smi(mech_smi: str, target_smiles: str) -> tuple[str, str]:
         if score == 0:
             continue
 
-        explicit_stereo_count = sum(mode in {"retain", "invert"} for mode in modes)
+        explicit_stereo_count = sum(mode == "invert" for mode in modes)
         clear_count = sum(mode == "clear" for mode in modes)
         preference = explicit_stereo_count if "@" in target_smiles else clear_count
         compactness = -len(set(zip((event.center_map for event in events), modes)))
