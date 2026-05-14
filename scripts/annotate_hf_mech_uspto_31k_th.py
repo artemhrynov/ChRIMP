@@ -60,6 +60,7 @@ ADDED_COLUMNS = [
     "th_status",
     "th_error",
     "target_smiles_for_validation",
+    "th_event_types",
 ]
 REQUIRED_COLUMNS = {"mech_smi_min", "rxn_idx", "step_idx_forward", "rxn_prod_min"}
 
@@ -78,6 +79,7 @@ class InferenceResult:
     mech_smi_min_th: str
     th_status: str
     th_error: str = ""
+    th_event_types: tuple[str, ...] = ()
 
 
 def split_mech_smi(mech_smi: str) -> tuple[str, str, str]:
