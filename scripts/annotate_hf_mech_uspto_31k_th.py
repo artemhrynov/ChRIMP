@@ -245,7 +245,7 @@ def is_planar_to_tetrahedral_stereo_event(
 
     if not (
         is_carbonyl_carbon(reactant_ms, center_idx)
-        or is_tertiary_carbocation(reactant_ms, center_idx)
+        or is_trigonal_carbocation(reactant_ms, center_idx)
     ):
         return False
 
