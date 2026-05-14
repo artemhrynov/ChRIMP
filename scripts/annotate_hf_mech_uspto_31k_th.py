@@ -137,6 +137,65 @@ def build_step_targets(df: pd.DataFrame) -> dict[int, str]: #understan this func
 
     return targets
 
+#Helper extracts the ligand replacement for tetrahedral event
+def find_ligand_pairs(
+    center_idx: int,
+    new_ligand_idx: int,
+    broken_bonds_by_atom: dict[int, list[int]],
+    broken_bond_cursors: dict[int, int],
+    idx_to_map: dict[int, int],
+) -> tuple[tuple[int, int], ...]:
+    broken_ligands = broken_bonds_by_atom.get(center_idx, [])
+
+    while broken_bond_cursors[center_idx] < len(broken_ligands):
+        old_ligand_idx = broken_ligands[broken_bond_cursors[center_idx]]
+        broken_bond_cursors[center_idx] += 1
+
+        if old_ligand_idx != new_ligand_idx:
+            return (
+                (idx_to_map[old_ligand_idx], idx_to_map[new_ligand_idx]),
+            )
+
+    return ()
+
+#Helper collects carbonyl carbons
+def is_carbonyl_carbon(ms, center_idx: int) -> bool:
+    center = ms.atoms[center_idx]
+
+    if center.symbol != "C":
+        return False
+
+    for bond in center.bonds:
+        other = bond.atom2 if bond.atom1 is center else bond.atom1
+
+        if other.symbol == "O" and int(bond.typebondint) == 2:
+            return True
+
+    return False
+
+#Helper collects tertiary carbocations
+
+def is_tertiary_carbocation(ms, center_idx: int) -> bool:
+    center = ms.atoms[center_idx]
+
+    if center.symbol != "C":
+        return False
+
+    if center.charge != 1:
+        return False
+
+    neighbors = ms.atom_neighbor_indices(center_idx)
+
+    if len(neighbors) != 3:
+        return False
+
+    carbon_neighbors = sum(
+        ms.atoms[neighbor_idx].symbol == "C"
+        for neighbor_idx in neighbors
+    )
+
+    return carbon_neighbors == 3
+
 
 def collect_stereo_events(msmi: MechSmiles) -> list[StereoEvent]: #updateso that it contains the treatment of carbonyl carbon
     idx_to_map = {
@@ -193,26 +252,7 @@ def collect_stereo_events(msmi: MechSmiles) -> list[StereoEvent]: #updateso that
 
     return events
 
-#Helper extracts the ligand replacement for tetrahedral event
-def find_ligand_pairs(
-    center_idx: int,
-    new_ligand_idx: int,
-    broken_bonds_by_atom: dict[int, list[int]],
-    broken_bond_cursors: dict[int, int],
-    idx_to_map: dict[int, int],
-) -> tuple[tuple[int, int], ...]:
-    broken_ligands = broken_bonds_by_atom.get(center_idx, [])
 
-    while broken_bond_cursors[center_idx] < len(broken_ligands):
-        old_ligand_idx = broken_ligands[broken_bond_cursors[center_idx]]
-        broken_bond_cursors[center_idx] += 1
-
-        if old_ligand_idx != new_ligand_idx:
-            return (
-                (idx_to_map[old_ligand_idx], idx_to_map[new_ligand_idx]),
-            )
-
-    return ()
 
 def format_stereo_updates(
     events: list[StereoEvent], modes: tuple[str, ...]
