@@ -1,0 +1,275 @@
+{
+  "total_rows": 15000,
+  "rows_with_th_added": 1749,
+  "status_counts": {
+    "no_stereo_relevant_event": 12899,
+    "added_mix": 1749,
+    "no_matching_mode": 352
+  },
+  "examples": [
+    {
+      "rxn_idx": 11,
+      "step_idx_forward": 2,
+      "mech_smi_min": "C1=CC2=CN=CC=C2C([NH2:1])=C1.O=[N+](O)C1=C(SC2=C(Cl)C=NC=C2Cl)SC([C:2](OC(=NC2CCCCC2)NC2CCCCC2)=[O:3])=C1|(1, 2);((2, 3), 3)",
+      "mech_smi_min_th": "C1=CC2=CN=CC=C2C([NH2:1])=C1.O=[N+](O)C1=C(SC2=C(Cl)C=NC=C2Cl)SC([C:2](OC(=NC2CCCCC2)NC2CCCCC2)=[O:3])=C1|(1, 2);((2, 3), 3)|TH(2,'mix',())",
+      "target_smiles_for_validation": "O=[N+](O)C1=C(SC2=C(Cl)C=NC=C2Cl)SC(C([O-])(OC(NC2CCCCC2)=[N:1]C2CCCCC2)[NH+:2](C2=CC=CC3=CN=CC=C32)[H:3])=C1",
+      "th_status": "added_mix",
+      "th_event_types": "planar_to_tetrahedral"
+    },
+    {
+      "rxn_idx": 9994,
+      "step_idx_forward": 1,
+      "mech_smi_min": "COC(=O)[CH+:1]C.ClC1=CN=C(OC2=CC=C([OH:2])C=C2)C(Cl)=C1|(2, 1)",
+      "mech_smi_min_th": "COC(=O)[CH+:1]C.ClC1=CN=C(OC2=CC=C([OH:2])C=C2)C(Cl)=C1|(2, 1)|TH(1,'mix',())",
+      "target_smiles_for_validation": "COC(=O)C(C)[OH+]C1=CC=C(OC2=NC=C(Cl)C=C2Cl)C=C1",
+      "th_status": "added_mix",
+      "th_event_types": "planar_to_tetrahedral"
+    },
+    {
+      "rxn_idx": 994,
+      "step_idx_forward": 0,
+      "mech_smi_min": "CN1N=C(C2=CC=CS2)C=C1[NH2:1].FC(F)(F)C1=CC=C([C:2](Cl)=[O:3])C=C1|(1, 2);((2, 3), 3)",
+      "mech_smi_min_th": "CN1N=C(C2=CC=CS2)C=C1[NH2:1].FC(F)(F)C1=CC=C([C:2](Cl)=[O:3])C=C1|(1, 2);((2, 3), 3)|TH(2,'mix',())",
+      "target_smiles_for_validation": "CN1N=C(C2=CC=CS2)C=C1[NH2+][C:1](C1=CC=C(C(F)(F)F)C=C1)([O-:2])[Cl:3]",
+      "th_status": "added_mix",
+      "th_event_types": "planar_to_tetrahedral"
+    },
+    {
+      "rxn_idx": 10007,
+      "step_idx_forward": 0,
+      "mech_smi_min": "CC(C)(C)OC(=O)O[C:1](OC(C)(C)C)=[O:2].COC1=CC=C(CC2C3=CC(OC)=C(OC)C=C3SCC[NH:3]2)C=C1OC|(3, 1);((1, 2), 2)",
+      "mech_smi_min_th": "CC(C)(C)OC(=O)O[C:1](OC(C)(C)C)=[O:2].COC1=CC=C(CC2C3=CC(OC)=C(OC)C=C3SCC[NH:3]2)C=C1OC|(3, 1);((1, 2), 2)|TH(1,'mix',())",
+      "target_smiles_for_validation": "COC1=CC=C(CC2C3=CC(OC)=C(OC)C=C3SCC[NH+]2[C:1](OC(C)(C)C)([O-:2])[O:3]C(=O)OC(C)(C)C)C=C1OC",
+      "th_status": "added_mix",
+      "th_event_types": "planar_to_tetrahedral"
+    },
+    {
+      "rxn_idx": 10006,
+      "step_idx_forward": 0,
+      "mech_smi_min": "CC[C:1](C1=NOC(COC2=CC=C(Cl)C=C2Cl)=N1)=[O:2].O[NH2:3].[H+:4]|(3, 1);((1, 2), 4)",
+      "mech_smi_min_th": "CC[C:1](C1=NOC(COC2=CC=C(Cl)C=C2Cl)=N1)=[O:2].O[NH2:3].[H+:4]|(3, 1);((1, 2), 4)|TH(1,'mix',())",
+      "target_smiles_for_validation": "CCC(C1=NOC(COC2=CC=C(Cl)C=C2Cl)=N1)([NH+:1](O)[H:2])[OH:3]",
+      "th_status": "added_mix",
+      "th_event_types": "planar_to_tetrahedral"
+    },
+    {
+      "rxn_idx": 10117,
+      "step_idx_forward": 0,
+      "mech_smi_min": "FC1=CC=C(OCC2CCCN([C:1](C3(C4=CC=C(Cl)C=C4)CCC3)=[O:2])C2)C=C1.[H:3][AlH3-:4]|((4, 3), 1);((1, 2), 4)",
+      "mech_smi_min_th": "FC1=CC=C(OCC2CCCN([C:1](C3(C4=CC=C(Cl)C=C4)CCC3)=[O:2])C2)C=C1.[H:3][AlH3-:4]|((4, 3), 1);((1, 2), 4)|TH(1,'mix',())",
+      "target_smiles_for_validation": "FC1=CC=C(OCC2CCC[N:1]([CH:2](C3(C4=CC=C(Cl)C=C4)CCC3)[O:3][AlH3-])C2)C=C1",
+      "th_status": "added_mix",
+      "th_event_types": "planar_to_tetrahedral"
+    },
+    {
+      "rxn_idx": 10124,
+      "step_idx_forward": 0,
+      "mech_smi_min": "C1=CSC([NH2:1])=N1.COC1CCC(CC(C2=CC=C(Cl)C(Cl)=C2)[C:2](OC)=[O:3])C1|(1, 2);((2, 3), 3)",
+      "mech_smi_min_th": "C1=CSC([NH2:1])=N1.COC1CCC(CC(C2=CC=C(Cl)C(Cl)=C2)[C:2](OC)=[O:3])C1|(1, 2);((2, 3), 3)|TH(2,'mix',())",
+      "target_smiles_for_validation": "COC1CCC(CC(C2=CC=C(Cl)C(Cl)=C2)[C:1]([NH2+]C2=NC=CS2)([O-:2])[O:3]C)C1",
+      "th_status": "added_mix",
+      "th_event_types": "planar_to_tetrahedral"
+    },
+    {
+      "rxn_idx": 10238,
+      "step_idx_forward": 2,
+      "mech_smi_min": "FC(F)(F)C1(C2=CC(Cl)=CC(Cl)=C2)CC(C2=CC=C([C:1](OC(=NC3CCCCC3)NC3CCCCC3)=[O:2])C3=C2C=CC=C3)=NO1.FC(F)(F)C[NH2:3]|(3, 1);((1, 2), 2)",
+      "mech_smi_min_th": "FC(F)(F)C1(C2=CC(Cl)=CC(Cl)=C2)CC(C2=CC=C([C:1](OC(=NC3CCCCC3)NC3CCCCC3)=[O:2])C3=C2C=CC=C3)=NO1.FC(F)(F)C[NH2:3]|(3, 1);((1, 2), 2)|TH(1,'mix',())",
+      "target_smiles_for_validation": "[O-]C(OC(NC1CCCCC1)=[N:1]C1CCCCC1)(C1=CC=C(C2=NOC(C3=CC(Cl)=CC(Cl)=C3)(C(F)(F)F)C2)C2=CC=CC=C21)[NH+:2](CC(F)(F)F)[H:3]",
+      "th_status": "added_mix",
+      "th_event_types": "planar_to_tetrahedral"
+    },
+    {
+      "rxn_idx": 10264,
+      "step_idx_forward": 2,
+      "mech_smi_min": "O=C1C(C[C:1](OC(=NC2CCCCC2)NC2CCCCC2)=[O:2])CC2=CC(Cl)=C3NN=CC3=C2CN1CC1=CC=NC=C1.O=C1NC2=C(C=CC=C2)C=C1C1CC[NH:3]CC1|(3, 1);((1, 2), 2)",
+      "mech_smi_min_th": "O=C1C(C[C:1](OC(=NC2CCCCC2)NC2CCCCC2)=[O:2])CC2=CC(Cl)=C3NN=CC3=C2CN1CC1=CC=NC=C1.O=C1NC2=C(C=CC=C2)C=C1C1CC[NH:3]CC1|(3, 1);((1, 2), 2)|TH(1,'mix',())",
+      "target_smiles_for_validation": "O=C1NC2=CC=CC=C2C=C1C1CC[N+:1](C([O-])(CC2CC3=CC(Cl)=C4NN=CC4=C3CN(CC3=CC=NC=C3)C2=O)OC(NC2CCCCC2)=[N:2]C2CCCCC2)([H:3])CC1",
+      "th_status": "added_mix",
+      "th_event_types": "planar_to_tetrahedral"
+    },
+    {
+      "rxn_idx": 10282,
+      "step_idx_forward": 0,
+      "mech_smi_min": "C1=CC2=CN=CC=C2C([NH2:1])=C1.COC1=CC=C([C:2](Cl)=[O:3])C=C1|(1, 2);((2, 3), 3)",
+      "mech_smi_min_th": "C1=CC2=CN=CC=C2C([NH2:1])=C1.COC1=CC=C([C:2](Cl)=[O:3])C=C1|(1, 2);((2, 3), 3)|TH(2,'mix',())",
+      "target_smiles_for_validation": "COC1=CC=C([C:1]([NH2+]C2=CC=CC3=CN=CC=C32)([O-:2])[Cl:3])C=C1",
+      "th_status": "added_mix",
+      "th_event_types": "planar_to_tetrahedral"
+    }
+  ],
+  "errors": 0,
+  "splits": {
+    "train": {
+      "rows": 5000,
+      "rows_with_th_added": 567,
+      "status_counts": {
+        "no_stereo_relevant_event": 4314,
+        "added_mix": 567,
+        "no_matching_mode": 119
+      },
+      "errors": 0,
+      "examples": [
+        {
+          "rxn_idx": 11,
+          "step_idx_forward": 2,
+          "mech_smi_min": "C1=CC2=CN=CC=C2C([NH2:1])=C1.O=[N+](O)C1=C(SC2=C(Cl)C=NC=C2Cl)SC([C:2](OC(=NC2CCCCC2)NC2CCCCC2)=[O:3])=C1|(1, 2);((2, 3), 3)",
+          "mech_smi_min_th": "C1=CC2=CN=CC=C2C([NH2:1])=C1.O=[N+](O)C1=C(SC2=C(Cl)C=NC=C2Cl)SC([C:2](OC(=NC2CCCCC2)NC2CCCCC2)=[O:3])=C1|(1, 2);((2, 3), 3)|TH(2,'mix',())",
+          "target_smiles_for_validation": "O=[N+](O)C1=C(SC2=C(Cl)C=NC=C2Cl)SC(C([O-])(OC(NC2CCCCC2)=[N:1]C2CCCCC2)[NH+:2](C2=CC=CC3=CN=CC=C32)[H:3])=C1",
+          "th_status": "added_mix",
+          "th_event_types": "planar_to_tetrahedral"
+        },
+        {
+          "rxn_idx": 9994,
+          "step_idx_forward": 1,
+          "mech_smi_min": "COC(=O)[CH+:1]C.ClC1=CN=C(OC2=CC=C([OH:2])C=C2)C(Cl)=C1|(2, 1)",
+          "mech_smi_min_th": "COC(=O)[CH+:1]C.ClC1=CN=C(OC2=CC=C([OH:2])C=C2)C(Cl)=C1|(2, 1)|TH(1,'mix',())",
+          "target_smiles_for_validation": "COC(=O)C(C)[OH+]C1=CC=C(OC2=NC=C(Cl)C=C2Cl)C=C1",
+          "th_status": "added_mix",
+          "th_event_types": "planar_to_tetrahedral"
+        },
+        {
+          "rxn_idx": 994,
+          "step_idx_forward": 0,
+          "mech_smi_min": "CN1N=C(C2=CC=CS2)C=C1[NH2:1].FC(F)(F)C1=CC=C([C:2](Cl)=[O:3])C=C1|(1, 2);((2, 3), 3)",
+          "mech_smi_min_th": "CN1N=C(C2=CC=CS2)C=C1[NH2:1].FC(F)(F)C1=CC=C([C:2](Cl)=[O:3])C=C1|(1, 2);((2, 3), 3)|TH(2,'mix',())",
+          "target_smiles_for_validation": "CN1N=C(C2=CC=CS2)C=C1[NH2+][C:1](C1=CC=C(C(F)(F)F)C=C1)([O-:2])[Cl:3]",
+          "th_status": "added_mix",
+          "th_event_types": "planar_to_tetrahedral"
+        },
+        {
+          "rxn_idx": 10007,
+          "step_idx_forward": 0,
+          "mech_smi_min": "CC(C)(C)OC(=O)O[C:1](OC(C)(C)C)=[O:2].COC1=CC=C(CC2C3=CC(OC)=C(OC)C=C3SCC[NH:3]2)C=C1OC|(3, 1);((1, 2), 2)",
+          "mech_smi_min_th": "CC(C)(C)OC(=O)O[C:1](OC(C)(C)C)=[O:2].COC1=CC=C(CC2C3=CC(OC)=C(OC)C=C3SCC[NH:3]2)C=C1OC|(3, 1);((1, 2), 2)|TH(1,'mix',())",
+          "target_smiles_for_validation": "COC1=CC=C(CC2C3=CC(OC)=C(OC)C=C3SCC[NH+]2[C:1](OC(C)(C)C)([O-:2])[O:3]C(=O)OC(C)(C)C)C=C1OC",
+          "th_status": "added_mix",
+          "th_event_types": "planar_to_tetrahedral"
+        },
+        {
+          "rxn_idx": 10006,
+          "step_idx_forward": 0,
+          "mech_smi_min": "CC[C:1](C1=NOC(COC2=CC=C(Cl)C=C2Cl)=N1)=[O:2].O[NH2:3].[H+:4]|(3, 1);((1, 2), 4)",
+          "mech_smi_min_th": "CC[C:1](C1=NOC(COC2=CC=C(Cl)C=C2Cl)=N1)=[O:2].O[NH2:3].[H+:4]|(3, 1);((1, 2), 4)|TH(1,'mix',())",
+          "target_smiles_for_validation": "CCC(C1=NOC(COC2=CC=C(Cl)C=C2Cl)=N1)([NH+:1](O)[H:2])[OH:3]",
+          "th_status": "added_mix",
+          "th_event_types": "planar_to_tetrahedral"
+        }
+      ]
+    },
+    "val": {
+      "rows": 5000,
+      "rows_with_th_added": 568,
+      "status_counts": {
+        "no_stereo_relevant_event": 4308,
+        "added_mix": 568,
+        "no_matching_mode": 124
+      },
+      "errors": 0,
+      "examples": [
+        {
+          "rxn_idx": 10117,
+          "step_idx_forward": 0,
+          "mech_smi_min": "FC1=CC=C(OCC2CCCN([C:1](C3(C4=CC=C(Cl)C=C4)CCC3)=[O:2])C2)C=C1.[H:3][AlH3-:4]|((4, 3), 1);((1, 2), 4)",
+          "mech_smi_min_th": "FC1=CC=C(OCC2CCCN([C:1](C3(C4=CC=C(Cl)C=C4)CCC3)=[O:2])C2)C=C1.[H:3][AlH3-:4]|((4, 3), 1);((1, 2), 4)|TH(1,'mix',())",
+          "target_smiles_for_validation": "FC1=CC=C(OCC2CCC[N:1]([CH:2](C3(C4=CC=C(Cl)C=C4)CCC3)[O:3][AlH3-])C2)C=C1",
+          "th_status": "added_mix",
+          "th_event_types": "planar_to_tetrahedral"
+        },
+        {
+          "rxn_idx": 10124,
+          "step_idx_forward": 0,
+          "mech_smi_min": "C1=CSC([NH2:1])=N1.COC1CCC(CC(C2=CC=C(Cl)C(Cl)=C2)[C:2](OC)=[O:3])C1|(1, 2);((2, 3), 3)",
+          "mech_smi_min_th": "C1=CSC([NH2:1])=N1.COC1CCC(CC(C2=CC=C(Cl)C(Cl)=C2)[C:2](OC)=[O:3])C1|(1, 2);((2, 3), 3)|TH(2,'mix',())",
+          "target_smiles_for_validation": "COC1CCC(CC(C2=CC=C(Cl)C(Cl)=C2)[C:1]([NH2+]C2=NC=CS2)([O-:2])[O:3]C)C1",
+          "th_status": "added_mix",
+          "th_event_types": "planar_to_tetrahedral"
+        },
+        {
+          "rxn_idx": 10238,
+          "step_idx_forward": 2,
+          "mech_smi_min": "FC(F)(F)C1(C2=CC(Cl)=CC(Cl)=C2)CC(C2=CC=C([C:1](OC(=NC3CCCCC3)NC3CCCCC3)=[O:2])C3=C2C=CC=C3)=NO1.FC(F)(F)C[NH2:3]|(3, 1);((1, 2), 2)",
+          "mech_smi_min_th": "FC(F)(F)C1(C2=CC(Cl)=CC(Cl)=C2)CC(C2=CC=C([C:1](OC(=NC3CCCCC3)NC3CCCCC3)=[O:2])C3=C2C=CC=C3)=NO1.FC(F)(F)C[NH2:3]|(3, 1);((1, 2), 2)|TH(1,'mix',())",
+          "target_smiles_for_validation": "[O-]C(OC(NC1CCCCC1)=[N:1]C1CCCCC1)(C1=CC=C(C2=NOC(C3=CC(Cl)=CC(Cl)=C3)(C(F)(F)F)C2)C2=CC=CC=C21)[NH+:2](CC(F)(F)F)[H:3]",
+          "th_status": "added_mix",
+          "th_event_types": "planar_to_tetrahedral"
+        },
+        {
+          "rxn_idx": 10264,
+          "step_idx_forward": 2,
+          "mech_smi_min": "O=C1C(C[C:1](OC(=NC2CCCCC2)NC2CCCCC2)=[O:2])CC2=CC(Cl)=C3NN=CC3=C2CN1CC1=CC=NC=C1.O=C1NC2=C(C=CC=C2)C=C1C1CC[NH:3]CC1|(3, 1);((1, 2), 2)",
+          "mech_smi_min_th": "O=C1C(C[C:1](OC(=NC2CCCCC2)NC2CCCCC2)=[O:2])CC2=CC(Cl)=C3NN=CC3=C2CN1CC1=CC=NC=C1.O=C1NC2=C(C=CC=C2)C=C1C1CC[NH:3]CC1|(3, 1);((1, 2), 2)|TH(1,'mix',())",
+          "target_smiles_for_validation": "O=C1NC2=CC=CC=C2C=C1C1CC[N+:1](C([O-])(CC2CC3=CC(Cl)=C4NN=CC4=C3CN(CC3=CC=NC=C3)C2=O)OC(NC2CCCCC2)=[N:2]C2CCCCC2)([H:3])CC1",
+          "th_status": "added_mix",
+          "th_event_types": "planar_to_tetrahedral"
+        },
+        {
+          "rxn_idx": 10282,
+          "step_idx_forward": 0,
+          "mech_smi_min": "C1=CC2=CN=CC=C2C([NH2:1])=C1.COC1=CC=C([C:2](Cl)=[O:3])C=C1|(1, 2);((2, 3), 3)",
+          "mech_smi_min_th": "C1=CC2=CN=CC=C2C([NH2:1])=C1.COC1=CC=C([C:2](Cl)=[O:3])C=C1|(1, 2);((2, 3), 3)|TH(2,'mix',())",
+          "target_smiles_for_validation": "COC1=CC=C([C:1]([NH2+]C2=CC=CC3=CN=CC=C32)([O-:2])[Cl:3])C=C1",
+          "th_status": "added_mix",
+          "th_event_types": "planar_to_tetrahedral"
+        }
+      ]
+    },
+    "test": {
+      "rows": 5000,
+      "rows_with_th_added": 614,
+      "status_counts": {
+        "added_mix": 614,
+        "no_stereo_relevant_event": 4277,
+        "no_matching_mode": 109
+      },
+      "errors": 0,
+      "examples": [
+        {
+          "rxn_idx": 10002,
+          "step_idx_forward": 0,
+          "mech_smi_min": "C1C[NH:1]CCO1.CC1=CC2=NC(C3=CC=CC(C)=N3)=C(C3=CC(C4=CC=C([CH:2]=[O:3])C=C4)=NC=C3)N2C=C1.[H+:4]|(1, 2);((2, 3), 4)",
+          "mech_smi_min_th": "C1C[NH:1]CCO1.CC1=CC2=NC(C3=CC=CC(C)=N3)=C(C3=CC(C4=CC=C([CH:2]=[O:3])C=C4)=NC=C3)N2C=C1.[H+:4]|(1, 2);((2, 3), 4)|TH(2,'mix',())",
+          "target_smiles_for_validation": "CC1=CC2=NC(C3=CC=CC(C)=N3)=C(C3=CC(C4=CC=C(C([N+:1]5([H:2])CCOCC5)[OH:3])C=C4)=NC=C3)N2C=C1",
+          "th_status": "added_mix",
+          "th_event_types": "planar_to_tetrahedral"
+        },
+        {
+          "rxn_idx": 10022,
+          "step_idx_forward": 2,
+          "mech_smi_min": "C1=CC([C:1](OC(=NC2CCCCC2)NC2CCCCC2)=[O:2])=CC=C1N1CCOCC1.C1=CC2=C(CCO2)C(N2CCN(CCC3CCC([NH2:3])CC3)CC2)=N1|(3, 1);((1, 2), 2)",
+          "mech_smi_min_th": "C1=CC([C:1](OC(=NC2CCCCC2)NC2CCCCC2)=[O:2])=CC=C1N1CCOCC1.C1=CC2=C(CCO2)C(N2CCN(CCC3CCC([NH2:3])CC3)CC2)=N1|(3, 1);((1, 2), 2)|TH(1,'mix',())",
+          "target_smiles_for_validation": "[O-]C(OC(NC1CCCCC1)=[N:1]C1CCCCC1)(C1=CC=C(N2CCOCC2)C=C1)[NH+:2](C1CCC(CCN2CCN(C3=NC=CC4=C3CCO4)CC2)CC1)[H:3]",
+          "th_status": "added_mix",
+          "th_event_types": "planar_to_tetrahedral"
+        },
+        {
+          "rxn_idx": 10010,
+          "step_idx_forward": 0,
+          "mech_smi_min": "Cl[C:1](C1CCCCC1)=[O:2].NC(=O)C1=CC=CC=C1[NH2:3]|(3, 1);((1, 2), 2)",
+          "mech_smi_min_th": "Cl[C:1](C1CCCCC1)=[O:2].NC(=O)C1=CC=CC=C1[NH2:3]|(3, 1);((1, 2), 2)|TH(1,'mix',())",
+          "target_smiles_for_validation": "NC(=O)C1=CC=CC=C1[NH2+][C:1](C1CCCCC1)([O-:2])[Cl:3]",
+          "th_status": "added_mix",
+          "th_event_types": "planar_to_tetrahedral"
+        },
+        {
+          "rxn_idx": 10027,
+          "step_idx_forward": 2,
+          "mech_smi_min": "CC(C)N1C=C([C:1](OC(=NC2CCCCC2)NC2CCCCC2)=[O:2])C2=C1C=C(Cl)C=C2.CC1=CN=C([NH2:3])S1|(3, 1);((1, 2), 2)",
+          "mech_smi_min_th": "CC(C)N1C=C([C:1](OC(=NC2CCCCC2)NC2CCCCC2)=[O:2])C2=C1C=C(Cl)C=C2.CC1=CN=C([NH2:3])S1|(3, 1);((1, 2), 2)|TH(1,'mix',())",
+          "target_smiles_for_validation": "CC1=CN=C([NH+:1](C([O-])(OC(NC2CCCCC2)=[N:2]C2CCCCC2)C2=CN(C(C)C)C3=C2C=CC(Cl)=C3)[H:3])S1",
+          "th_status": "added_mix",
+          "th_event_types": "planar_to_tetrahedral"
+        },
+        {
+          "rxn_idx": 10069,
+          "step_idx_forward": 1,
+          "mech_smi_min": "O=C(NC1CC1)C(=O)[O-:1].[C]1=NC=CN1[C:2](N1[C]=[NH+]C=C1)=[O:3]|(1, 2);((2, 3), 3)",
+          "mech_smi_min_th": "O=C(NC1CC1)C(=O)[O-:1].[C]1=NC=CN1[C:2](N1[C]=[NH+]C=C1)=[O:3]|(1, 2);((2, 3), 3)|TH(2,'mix',())",
+          "target_smiles_for_validation": "O=C(NC1CC1)C(=O)O[C:1](N1[C]=NC=C1)([O-:2])[N:3]1C=C[NH+:4]=[C:5]1",
+          "th_status": "added_mix",
+          "th_event_types": "planar_to_tetrahedral"
+        }
+      ]
+    }
+  }
+}
