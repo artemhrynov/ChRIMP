@@ -175,7 +175,7 @@ def is_carbonyl_carbon(ms, center_idx: int) -> bool:
 
 #Helper collects trigonal carbocations
 
-def is_tertiary_carbocation(ms, center_idx: int) -> bool:
+def is_trigonal_carbocation(ms, center_idx: int) -> bool:
     center = ms.atoms[center_idx]
 
     if center.symbol != "C":
@@ -215,6 +215,17 @@ def is_planar_to_tetrahedral_stereo_event(
     center_idx: int,
     new_ligand_idx: int,
 ) -> bool:
+    center = reactant_ms.atoms[center_idx]
+
+    if center.symbol != "C":
+        return False
+
+    if center.has_tetrahedral_chirality:
+        return False
+
+    if new_ligand_idx in reactant_ms.atom_neighbor_indices(center_idx):
+        return False
+
     if not (
         is_carbonyl_carbon(reactant_ms, center_idx)
         or is_tertiary_carbocation(reactant_ms, center_idx)
@@ -225,7 +236,6 @@ def is_planar_to_tetrahedral_stereo_event(
         product_ms,
         center_idx,
     )
-
 
 def collect_stereo_events(msmi: MechSmiles) -> list[StereoEvent]:
     idx_to_map = {
@@ -270,12 +280,13 @@ def collect_stereo_events(msmi: MechSmiles) -> list[StereoEvent]:
         if center_idx not in idx_to_map:
             continue
 
-        if new_ligand_idx not in idx_to_map:
-            continue
-
         center = msmi.ms.atoms[center_idx]
 
         if center.has_tetrahedral_chirality:
+
+            if new_ligand_idx not in idx_to_map:
+                continue
+
             ligand_pairs = find_ligand_pairs(
                 center_idx=center_idx,
                 new_ligand_idx=new_ligand_idx,
