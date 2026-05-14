@@ -399,14 +399,19 @@ def validate_model_output(
 
     try:
         predicted_msmi = MechSmiles(predicted_mech_smi)
-        
+
         try:
             predicted_product = predicted_msmi.ms_prod.mapped_smiles
-        except Exception:
+        except Exception as exc:
+            if compare_stereo:
+                return False, (
+                    "mapped_product_generation_failed: "
+                    f"{type(exc).name}: {exc}"
+                )
             predicted_product = predicted_msmi.prod
 
     except Exception as exc:
-        return False, f"product_generation_failed: {type(exc).__name__}: {exc}"
+        return False, f"product_generation_failed: {type(exc).name}: {exc}"
 
     predicted_counter = canonical_component_counter(
         predicted_product,
@@ -492,6 +497,8 @@ def infer_th_mech_smi(
         for event in events
         if event.event_type == "tetrahedral_acceptor"
     }
+
+    compare_stereo = bool(keep_stereo_center_maps)
 
     matches: dict[str, tuple[str, ...]] = {}
     candidate_errors: list[str] = []
