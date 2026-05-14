@@ -411,7 +411,7 @@ def infer_th_mech_smi(
     matches: dict[str, tuple[str, ...]] = {}
     candidate_errors: list[str] = []
 
-    for modes in product(mode_options, repeat=len(events)):
+    for modes in product(*(event.mode_options for event in events)):
         candidate = with_stereo_updates(mech_smi, events, modes)
         matches_target, error = validate_model_output(candidate, target_smiles)
         if error:
