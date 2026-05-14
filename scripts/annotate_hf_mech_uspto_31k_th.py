@@ -372,9 +372,14 @@ def with_stereo_updates(
 
 
 def validate_model_output(
-    predicted_mech_smi: str, target_smiles: str
+    predicted_mech_smi: str,
+    target_smiles: str,
+    ignore_stereo_center_maps: set[int] | None = None,
 ) -> tuple[bool, str]:
-    target_counter = canonical_component_counter(target_smiles)
+    target_counter = canonical_component_counter(
+        target_smiles,
+        ignore_stereo_center_maps=ignore_stereo_center_maps,
+    )
     if target_counter is None:
         return False, "target_canonicalization_failed"
 
@@ -383,12 +388,14 @@ def validate_model_output(
     except Exception as exc:
         return False, f"product_generation_failed: {type(exc).__name__}: {exc}"
 
-    predicted_counter = canonical_component_counter(predicted_product)
+    predicted_counter = canonical_component_counter(
+        predicted_product,
+        ignore_stereo_center_maps=ignore_stereo_center_maps,
+    )
     if predicted_counter is None:
         return False, "predicted_product_canonicalization_failed"
 
     return predicted_counter == target_counter, ""
-
 
 def infer_th_mech_smi(
     mech_smi: str,
