@@ -173,7 +173,7 @@ def is_carbonyl_carbon(ms, center_idx: int) -> bool:
 
     return False
 
-#Helper collects tertiary carbocations
+#Helper collects trigonal carbocations
 
 def is_tertiary_carbocation(ms, center_idx: int) -> bool:
     center = ms.atoms[center_idx]
@@ -194,7 +194,19 @@ def is_tertiary_carbocation(ms, center_idx: int) -> bool:
         for neighbor_idx in neighbors
     )
 
-    return carbon_neighbors == 3
+    return len(neighbors) == 3
+
+#Helper detects whether the carbon is stereogenic
+
+def product_center_is_potential_tetrahedral_stereocenter(
+    product_ms,
+    center_idx: int,
+) -> bool:
+    mol = product_ms.to_rdkit_mol(include_chirality=False)
+
+    possible_centers = product_ms.potential_tetrahedral_chiral_atom_indices(mol)
+
+    return center_idx in possible_centers
 
 
 def collect_stereo_events(msmi: MechSmiles) -> list[StereoEvent]: #updateso that it contains the treatment of carbonyl carbon
