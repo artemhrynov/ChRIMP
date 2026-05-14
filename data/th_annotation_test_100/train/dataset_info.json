@@ -1,0 +1,72 @@
+{
+  "citation": "",
+  "description": "",
+  "features": {
+    "mech_smi_min": {
+      "dtype": "large_string",
+      "_type": "Value"
+    },
+    "mech_smi_equ": {
+      "dtype": "large_string",
+      "_type": "Value"
+    },
+    "elem_reac_min": {
+      "dtype": "large_string",
+      "_type": "Value"
+    },
+    "elem_prod_min": {
+      "dtype": "large_string",
+      "_type": "Value"
+    },
+    "elem_reac_equ": {
+      "dtype": "large_string",
+      "_type": "Value"
+    },
+    "elem_prod_equ": {
+      "dtype": "large_string",
+      "_type": "Value"
+    },
+    "rxn_prod_min": {
+      "dtype": "large_string",
+      "_type": "Value"
+    },
+    "rxn_idx": {
+      "dtype": "int64",
+      "_type": "Value"
+    },
+    "step_idx_forward": {
+      "dtype": "int64",
+      "_type": "Value"
+    },
+    "step_idx_retro": {
+      "dtype": "int64",
+      "_type": "Value"
+    },
+    "split": {
+      "dtype": "large_string",
+      "_type": "Value"
+    },
+    "mech_smi_min_th": {
+      "dtype": "large_string",
+      "_type": "Value"
+    },
+    "th_status": {
+      "dtype": "large_string",
+      "_type": "Value"
+    },
+    "th_error": {
+      "dtype": "large_string",
+      "_type": "Value"
+    },
+    "target_smiles_for_validation": {
+      "dtype": "large_string",
+      "_type": "Value"
+    },
+    "th_event_types": {
+      "dtype": "large_string",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": ""
+}

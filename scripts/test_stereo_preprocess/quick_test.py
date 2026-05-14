@@ -1,7 +1,7 @@
 from rdkit import Chem
 
-pred = "C=CC([O-])(Cl)[NH+]1CCC[C@H]1C(=O)OC"
-target = "C=C[C:1]([NH+]1CCCC1C(=O)OC)([O-:2])[Cl:3]"
+pred = "COC(=O)C1=CC(C2=[NH+]C(O)(C3=CC=C(C(F)(F)F)C=C3)CS2)=CC=C1"
+target = "COC(=O)C1=CC(C2=[N+:1]([H:2])C(O)(C3=CC=C(C(F)(F)F)C=C3)CS2)=CC=C1.[Br-:3]"
 
 def can(smiles, stereo=True):
     mol = Chem.MolFromSmiles(smiles)

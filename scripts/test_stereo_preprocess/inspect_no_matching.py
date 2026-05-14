@@ -1,7 +1,7 @@
 from datasets import load_from_disk
 import pandas as pd
 
-DATASET_PATH = "data/th_annotation_test_500"
+DATASET_PATH = "data/th_annotation_test_100"
 
 ds = load_from_disk(DATASET_PATH)
 
