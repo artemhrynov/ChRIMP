@@ -471,6 +471,9 @@ class MoleculeSet:
                         "Stereo mode 'mix' requires the center to have four "
                         "ligands after the move"
                     )
+            # These modes intentionally leave the center without an assigned
+            # tetrahedral tag. For "mix", this represents a racemic outcome;
+            # a richer future representation could encode wavy/squiggly bonds.
             center.clear_tetrahedral_chirality()
             self.chiral = any(atom.has_tetrahedral_chirality for atom in self.atoms) # after you potentially cleaned this atom, is the molecule still chiral
             return stereo_mode in {"mix", "clear", "unknown"}
