@@ -210,16 +210,7 @@ def is_trigonal_carbocation(ms, center_idx: int) -> bool:
 
     neighbors = ms.atom_neighbor_indices(center_idx)
 
-    if len(neighbors) != 3:
-        return False
-
-    carbon_neighbors = sum(
-        ms.atoms[neighbor_idx].symbol == "C"
-        for neighbor_idx in neighbors
-    )
-
     return len(neighbors) == 3
-
 #Helper detects whether the product can be stereogenic after the move
 
 def product_center_becomes_tetrahedral_stereogenic( #check this helper once again
@@ -426,6 +417,7 @@ def resolve_matching_candidates(
     events: list[StereoEvent],
     matches: dict[str, tuple[str, ...]],
 ) -> InferenceResult:
+    event_types = tuple(event.event_type for event in events)
     ranked = sorted(
         matches.items(),
         key=lambda item: candidate_priority(events, item[1]),
@@ -439,12 +431,13 @@ def resolve_matching_candidates(
 
     if len(best_matches) == 1:
         candidate, modes = best_matches[0]
-        return InferenceResult(candidate, "added_" + "_".join(modes))
+        return InferenceResult(candidate, "added_" + "_".join(modes), th_event_types=event_types,)
 
     return InferenceResult(
         mech_smi,
         "ambiguous_matching_mode",
         f"{len(matches)} candidates matched target",
+        th_event_types=event_types,
     )
 
 def infer_th_mech_smi(
@@ -471,6 +464,8 @@ def infer_th_mech_smi(
     if not events:
         return InferenceResult(mech_smi, "no_stereo_relevant_event")
 
+    event_types = tuple(event.event_type for event in events)
+
     ignore_stereo_center_maps = {
         event.center_map
         for event in events
@@ -496,13 +491,13 @@ def infer_th_mech_smi(
 
     if not matches:
         error = "; ".join(sorted(set(candidate_errors))[:3])
-        return InferenceResult(mech_smi, "no_matching_mode", error)
+        return InferenceResult(mech_smi, "no_matching_mode", error, th_event_types=event_types,)
 
     if len(matches) > 1:
         return resolve_matching_candidates(mech_smi, events, matches)
 
     candidate, modes = next(iter(matches.items()))
-    return InferenceResult(candidate, "added_" + "_".join(modes))
+    return InferenceResult(candidate, "added_" + "_".join(modes), th_event_types=event_types,)
 
 
 def annotate_split_dataset(
@@ -531,12 +526,14 @@ def annotate_split_dataset(
     statuses = []
     errors = []
     target_values = []
+    event_type_values = []
     examples = []
 
     for row_index, row in df.iterrows():
         mech_smi = row["mech_smi_min"]
         target_smiles = targets.get(row_index, "")
         result = infer_th_mech_smi(mech_smi, target_smiles, mode_options)
+        event_type_values.append(",".join(result.th_event_types))
 
         annotated_values.append(result.mech_smi_min_th)
         statuses.append(result.th_status)
@@ -563,6 +560,7 @@ def annotate_split_dataset(
     df["th_status"] = statuses
     df["th_error"] = errors
     df["target_smiles_for_validation"] = target_values
+    df["th_event_types"] = event_type_values
 
     output_columns = [column for column in KEEP_COLUMNS if column in df.columns]
     output_columns.extend(ADDED_COLUMNS)
