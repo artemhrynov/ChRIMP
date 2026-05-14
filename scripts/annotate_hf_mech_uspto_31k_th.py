@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 
 
 DEFAULT_DATASET_NAME = "SchwallerGroup/mech_uspto_31k"
-DEFAULT_MODE_OPTIONS = ("invert", "clear") #should really check whether it makes sense
+DEFAULT_MODE_OPTIONS = ("invert", "clear") #should be removed later, different logic is used
 SUPPORTED_MODE_OPTIONS = {"invert", "clear", "unknown", "mix"}
 TETRAHEDRAL_ACCEPTOR_MODES = ("invert", "clear")
 PLANAR_TO_TETRAHEDRAL_MODES = ("mix", "clear")
@@ -117,6 +117,8 @@ def canonical_unmapped_smiles(
     for atom in mol.GetAtoms():
         if atom.GetAtomMapNum() in ignore_stereo_center_maps:
             atom.SetChiralTag(Chem.rdchem.ChiralType.CHI_UNSPECIFIED)
+    
+    Chem.AssignStereochemistry(mol, force=True, cleanIt=True)
 
     for atom in mol.GetAtoms():
         atom.SetAtomMapNum(0)
