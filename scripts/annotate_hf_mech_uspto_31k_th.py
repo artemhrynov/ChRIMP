@@ -1,11 +1,16 @@
 """
+Annotate SchwallerGroup/mech_uspto_31k with explicit TH(...) updates.
 
-This script loads the Hugging Face
-DatasetDict, preserves its splits, and adds ``mech_smi_min_th`` plus TH
-diagnostic columns. TH annotations are only added when a chiral tetrahedral
-acceptor is attacked and a unique candidate product matches the expected next
-state.
+The source dataset is left untouched. This script loads the Hugging Face
+DatasetDict, preserves its splits, and adds mech_smi_min_th plus diagnostic
+columns.
 
+Two stereochemical event types are considered:
+
+1. attacks on already tetrahedral chiral acceptors, tested with invert/clear;
+2. attacks on prochiral planar carbon centers, such as carbonyl carbons and
+   trigonal carbocations, tested with mix/clear when the product center becomes
+   tetrahedral stereogenic.
 """
 
 from __future__ import annotations
