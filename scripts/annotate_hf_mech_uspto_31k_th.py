@@ -88,7 +88,10 @@ def split_mech_smi(mech_smi: str) -> tuple[str, str, str]:
     return smiles, arrows, stereo
 
 
-def canonical_unmapped_smiles(smiles: str) -> str | None: #change the way of comparison for mix
+def canonical_unmapped_smiles(
+    smiles: str,
+    ignore_stereo_center_maps: set[int] | None = None,
+) -> str | None:
     if not isinstance(smiles, str) or not smiles:
         return ""
 
@@ -101,6 +104,12 @@ def canonical_unmapped_smiles(smiles: str) -> str | None: #change the way of com
             Chem.SanitizeMol(mol)
         except Exception:
             mol.UpdatePropertyCache(strict=False)
+            
+    ignore_stereo_center_maps = ignore_stereo_center_maps or set()
+
+    for atom in mol.GetAtoms():
+        if atom.GetAtomMapNum() in ignore_stereo_center_maps:
+            atom.SetChiralTag(Chem.rdchem.ChiralType.CHI_UNSPECIFIED)
 
     for atom in mol.GetAtoms():
         atom.SetAtomMapNum(0)
