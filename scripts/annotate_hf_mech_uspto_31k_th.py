@@ -406,12 +406,12 @@ def validate_model_output(
             if compare_stereo:
                 return False, (
                     "mapped_product_generation_failed: "
-                    f"{type(exc).name}: {exc}"
+                    f"{type(exc).__name__}: {exc}"
                 )
             predicted_product = predicted_msmi.prod
 
     except Exception as exc:
-        return False, f"product_generation_failed: {type(exc).name}: {exc}"
+        return False, f"product_generation_failed: {type(exc).__name__}: {exc}"
 
     predicted_counter = canonical_component_counter(
         predicted_product,
