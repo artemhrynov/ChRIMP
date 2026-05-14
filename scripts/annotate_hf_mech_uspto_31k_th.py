@@ -104,7 +104,7 @@ def canonical_unmapped_smiles(
             Chem.SanitizeMol(mol)
         except Exception:
             mol.UpdatePropertyCache(strict=False)
-            
+
     ignore_stereo_center_maps = ignore_stereo_center_maps or set()
 
     for atom in mol.GetAtoms():
@@ -120,8 +120,14 @@ def canonical_unmapped_smiles(
         return None
 
 
-def canonical_component_counter(smiles: str) -> Counter[str] | None:
-    canonical = canonical_unmapped_smiles(smiles)
+def canonical_component_counter(
+    smiles: str,
+    ignore_stereo_center_maps: set[int] | None = None,
+) -> Counter[str] | None:
+    canonical = canonical_unmapped_smiles(
+        smiles,
+        ignore_stereo_center_maps=ignore_stereo_center_maps,
+    )
     if canonical is None:
         return None
     if canonical == "":
