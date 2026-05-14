@@ -66,6 +66,8 @@ REQUIRED_COLUMNS = {"mech_smi_min", "rxn_idx", "step_idx_forward", "rxn_prod_min
 class StereoEvent:
     center_map: int
     ligand_pairs: tuple[tuple[int, int], ...]
+    event_type: str
+    mode_options: tuple[str, ...]
 
 
 @dataclass(frozen=True)
