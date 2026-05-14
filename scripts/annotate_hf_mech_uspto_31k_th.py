@@ -1,10 +1,11 @@
-"""Annotate SchwallerGroup/mech_uspto_31k with explicit TH(...) updates.
+"""
 
-The source dataset is left untouched. This script loads the Hugging Face
+This script loads the Hugging Face
 DatasetDict, preserves its splits, and adds ``mech_smi_min_th`` plus TH
 diagnostic columns. TH annotations are only added when a chiral tetrahedral
 acceptor is attacked and a unique candidate product matches the expected next
 state.
+
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ if TYPE_CHECKING:
 
 
 DEFAULT_DATASET_NAME = "SchwallerGroup/mech_uspto_31k"
-DEFAULT_MODE_OPTIONS = ("invert", "clear")
+DEFAULT_MODE_OPTIONS = ("invert", "clear") #should really check whether it makes sense
 SUPPORTED_MODE_OPTIONS = {"invert", "clear", "unknown", "mix"}
 
 KEEP_COLUMNS = [
@@ -82,7 +83,7 @@ def split_mech_smi(mech_smi: str) -> tuple[str, str, str]:
     return smiles, arrows, stereo
 
 
-def canonical_unmapped_smiles(smiles: str) -> str | None:
+def canonical_unmapped_smiles(smiles: str) -> str | None: #change the way of comparison for mix
     if not isinstance(smiles, str) or not smiles:
         return ""
 
@@ -114,7 +115,7 @@ def canonical_component_counter(smiles: str) -> Counter[str] | None:
     return Counter(canonical.split("."))
 
 
-def build_step_targets(df: pd.DataFrame) -> dict[int, str]:
+def build_step_targets(df: pd.DataFrame) -> dict[int, str]: #understan this function better
     targets: dict[int, str] = {}
 
     for _, group in df.groupby("rxn_idx", sort=False):
@@ -132,7 +133,7 @@ def build_step_targets(df: pd.DataFrame) -> dict[int, str]:
     return targets
 
 
-def collect_stereo_events(msmi: MechSmiles) -> list[StereoEvent]:
+def collect_stereo_events(msmi: MechSmiles) -> list[StereoEvent]: #updateso that it contains the treatment of carbonyl carbon
     idx_to_map = {
         atom_idx: map_idx for map_idx, atom_idx in msmi.ms.atom_map_dict.items()
     }
@@ -249,8 +250,6 @@ def infer_th_mech_smi(
     if not isinstance(mech_smi, str) or not mech_smi:
         return InferenceResult(str(mech_smi), "invalid_input", "empty mech_smi_min")
 
-    if "@" not in mech_smi:
-        return InferenceResult(mech_smi, "no_input_stereo")
 
     if not isinstance(target_smiles, str) or not target_smiles:
         return InferenceResult(mech_smi, "target_missing", "empty target smiles")
