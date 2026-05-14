@@ -193,6 +193,26 @@ def collect_stereo_events(msmi: MechSmiles) -> list[StereoEvent]: #updateso that
 
     return events
 
+#Helper extracts the ligand replacement for tetrahedral event
+def find_ligand_pairs(
+    center_idx: int,
+    new_ligand_idx: int,
+    broken_bonds_by_atom: dict[int, list[int]],
+    broken_bond_cursors: dict[int, int],
+    idx_to_map: dict[int, int],
+) -> tuple[tuple[int, int], ...]:
+    broken_ligands = broken_bonds_by_atom.get(center_idx, [])
+
+    while broken_bond_cursors[center_idx] < len(broken_ligands):
+        old_ligand_idx = broken_ligands[broken_bond_cursors[center_idx]]
+        broken_bond_cursors[center_idx] += 1
+
+        if old_ligand_idx != new_ligand_idx:
+            return (
+                (idx_to_map[old_ligand_idx], idx_to_map[new_ligand_idx]),
+            )
+
+    return ()
 
 def format_stereo_updates(
     events: list[StereoEvent], modes: tuple[str, ...]
