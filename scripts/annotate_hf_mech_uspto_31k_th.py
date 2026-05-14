@@ -397,6 +397,47 @@ def validate_model_output(
 
     return predicted_counter == target_counter, ""
 
+
+def candidate_priority(
+    events: list[StereoEvent],
+    modes: tuple[str, ...],
+) -> tuple[int, ...]:
+    priority = []
+
+    for event, mode in zip(events, modes, strict=True):
+        if event.event_type == "planar_to_tetrahedral":
+            priority.append(0 if mode == "mix" else 1)
+        else:
+            priority.append(0)
+
+    return tuple(priority)
+
+def resolve_matching_candidates(
+    mech_smi: str,
+    events: list[StereoEvent],
+    matches: dict[str, tuple[str, ...]],
+) -> InferenceResult:
+    ranked = sorted(
+        matches.items(),
+        key=lambda item: candidate_priority(events, item[1]),
+    )
+
+    best_priority = candidate_priority(events, ranked[0][1])
+    best_matches = [
+        item for item in ranked
+        if candidate_priority(events, item[1]) == best_priority
+    ]
+
+    if len(best_matches) == 1:
+        candidate, modes = best_matches[0]
+        return InferenceResult(candidate, "added_" + "_".join(modes))
+
+    return InferenceResult(
+        mech_smi,
+        "ambiguous_matching_mode",
+        f"{len(matches)} candidates matched target",
+    )
+
 def infer_th_mech_smi(
     mech_smi: str,
     target_smiles: str,
@@ -405,17 +446,8 @@ def infer_th_mech_smi(
     if not isinstance(mech_smi, str) or not mech_smi:
         return InferenceResult(str(mech_smi), "invalid_input", "empty mech_smi_min")
 
-
     if not isinstance(target_smiles, str) or not target_smiles:
         return InferenceResult(mech_smi, "target_missing", "empty target smiles")
-
-    target_counter = canonical_component_counter(target_smiles)
-    if target_counter is None:
-        return InferenceResult(
-            mech_smi,
-            "target_canonicalization_failed",
-            "RDKit could not canonicalize target smiles",
-        )
 
     try:
         msmi = MechSmiles(mech_smi)
@@ -428,16 +460,28 @@ def infer_th_mech_smi(
         )
 
     if not events:
-         return InferenceResult(mech_smi, "no_stereo_relevant_event")
+        return InferenceResult(mech_smi, "no_stereo_relevant_event")
+
+    ignore_stereo_center_maps = {
+        event.center_map
+        for event in events
+        if event.event_type == "planar_to_tetrahedral"
+    }
 
     matches: dict[str, tuple[str, ...]] = {}
     candidate_errors: list[str] = []
 
     for modes in product(*(event.mode_options for event in events)):
         candidate = with_stereo_updates(mech_smi, events, modes)
-        matches_target, error = validate_model_output(candidate, target_smiles)
+        matches_target, error = validate_model_output(
+            candidate,
+            target_smiles,
+            ignore_stereo_center_maps=ignore_stereo_center_maps,
+        )
+
         if error:
             candidate_errors.append(error)
+
         if matches_target:
             matches[candidate] = modes
 
@@ -446,11 +490,7 @@ def infer_th_mech_smi(
         return InferenceResult(mech_smi, "no_matching_mode", error)
 
     if len(matches) > 1:
-        return InferenceResult(
-            mech_smi,
-            "ambiguous_matching_mode",
-            f"{len(matches)} candidates matched target",
-        )
+        return resolve_matching_candidates(mech_smi, events, matches)
 
     candidate, modes = next(iter(matches.items()))
     return InferenceResult(candidate, "added_" + "_".join(modes))
