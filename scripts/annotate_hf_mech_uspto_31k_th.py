@@ -406,7 +406,7 @@ def infer_th_mech_smi(
         )
 
     if not events:
-        return InferenceResult(mech_smi, "no_chiral_acceptor")
+         return InferenceResult(mech_smi, "no_stereo_relevant_event")
 
     matches: dict[str, tuple[str, ...]] = {}
     candidate_errors: list[str] = []
