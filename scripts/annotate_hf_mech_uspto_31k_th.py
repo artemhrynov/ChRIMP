@@ -39,6 +39,8 @@ if TYPE_CHECKING:
 DEFAULT_DATASET_NAME = "SchwallerGroup/mech_uspto_31k"
 DEFAULT_MODE_OPTIONS = ("invert", "clear") #should really check whether it makes sense
 SUPPORTED_MODE_OPTIONS = {"invert", "clear", "unknown", "mix"}
+TETRAHEDRAL_ACCEPTOR_MODES = ("invert", "clear")
+PLANAR_TO_TETRAHEDRAL_MODES = ("mix", "clear")
 
 KEEP_COLUMNS = [
     "mech_smi_min",
@@ -66,8 +68,9 @@ REQUIRED_COLUMNS = {"mech_smi_min", "rxn_idx", "step_idx_forward", "rxn_prod_min
 class StereoEvent:
     center_map: int
     ligand_pairs: tuple[tuple[int, int], ...]
-    event_type: str
-    mode_options: tuple[str, ...]
+    TETRAHEDRAL_ACCEPTOR_MODES = ("invert", "clear")
+    PLANAR_TO_TETRAHEDRAL_MODES = ("mix", "clear")
+    
 
 
 @dataclass(frozen=True)
