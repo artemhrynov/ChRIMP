@@ -196,9 +196,9 @@ def is_tertiary_carbocation(ms, center_idx: int) -> bool:
 
     return len(neighbors) == 3
 
-#Helper detects whether the carbon is stereogenic
+#Helper detects whether the product can be stereogenic after the move
 
-def product_center_is_potential_tetrahedral_stereocenter(
+def product_center_becomes_tetrahedral_stereogenic( #check this helper once again
     product_ms,
     center_idx: int,
 ) -> bool:
@@ -208,11 +208,31 @@ def product_center_is_potential_tetrahedral_stereocenter(
 
     return center_idx in possible_centers
 
+#Helper that detects stereogenic events
+def is_planar_to_tetrahedral_stereo_event(
+    reactant_ms,
+    product_ms,
+    center_idx: int,
+    new_ligand_idx: int,
+) -> bool:
+    if not (
+        is_carbonyl_carbon(reactant_ms, center_idx)
+        or is_tertiary_carbocation(reactant_ms, center_idx)
+    ):
+        return False
 
-def collect_stereo_events(msmi: MechSmiles) -> list[StereoEvent]: #updateso that it contains the treatment of carbonyl carbon
+    return product_center_becomes_tetrahedral_stereogenic(
+        product_ms,
+        center_idx,
+    )
+
+
+def collect_stereo_events(msmi: MechSmiles) -> list[StereoEvent]:
     idx_to_map = {
-        atom_idx: map_idx for map_idx, atom_idx in msmi.ms.atom_map_dict.items()
+        atom_idx: map_idx
+        for map_idx, atom_idx in msmi.ms.atom_map_dict.items()
     }
+
     processed_moves = []
     broken_bonds_by_atom: dict[int, list[int]] = defaultdict(list)
 
@@ -224,6 +244,11 @@ def collect_stereo_events(msmi: MechSmiles) -> list[StereoEvent]: #updateso that
             broken_bonds_by_atom[move[1]].append(move[2])
             broken_bonds_by_atom[move[2]].append(move[1])
 
+    try:
+        product_ms = msmi.ms.make_move(processed_moves)
+    except Exception:
+        product_ms = None
+
     broken_bond_cursors: dict[int, int] = defaultdict(int)
     events: list[StereoEvent] = []
 
@@ -234,36 +259,56 @@ def collect_stereo_events(msmi: MechSmiles) -> list[StereoEvent]: #updateso that
         if move[0] == "a":
             center_idx = move[2]
             new_ligand_idx = move[1]
+
         elif move[0] == "ba":
             center_idx = move[3]
             new_ligand_idx = move[2]
+
         else:
             continue
 
-        if not msmi.ms.atoms[center_idx].has_tetrahedral_chirality:
+        if center_idx not in idx_to_map:
             continue
 
-        ligand_pairs: tuple[tuple[int, int], ...] = ()
-        broken_ligands = broken_bonds_by_atom.get(center_idx, [])
+        if new_ligand_idx not in idx_to_map:
+            continue
 
-        while broken_bond_cursors[center_idx] < len(broken_ligands):
-            old_ligand_idx = broken_ligands[broken_bond_cursors[center_idx]]
-            broken_bond_cursors[center_idx] += 1
-            if old_ligand_idx != new_ligand_idx:
-                ligand_pairs = (
-                    (idx_to_map[old_ligand_idx], idx_to_map[new_ligand_idx]),
-                )
-                break
+        center = msmi.ms.atoms[center_idx]
 
-        events.append(
-            StereoEvent(
-                center_map=idx_to_map[center_idx],
-                ligand_pairs=ligand_pairs,
+        if center.has_tetrahedral_chirality:
+            ligand_pairs = find_ligand_pairs(
+                center_idx=center_idx,
+                new_ligand_idx=new_ligand_idx,
+                broken_bonds_by_atom=broken_bonds_by_atom,
+                broken_bond_cursors=broken_bond_cursors,
+                idx_to_map=idx_to_map,
             )
-        )
+
+            events.append(
+                StereoEvent(
+                    center_map=idx_to_map[center_idx],
+                    ligand_pairs=ligand_pairs,
+                    event_type="tetrahedral_acceptor",
+                    mode_options=TETRAHEDRAL_ACCEPTOR_MODES,
+                )
+            )
+
+        elif product_ms is not None and is_planar_to_tetrahedral_stereo_event(
+            reactant_ms=msmi.ms,
+            product_ms=product_ms,
+            center_idx=center_idx,
+            new_ligand_idx=new_ligand_idx,
+        ):
+            events.append(
+                StereoEvent(
+                    center_map=idx_to_map[center_idx],
+                    ligand_pairs=(),
+                    event_type="planar_to_tetrahedral",
+                    mode_options=PLANAR_TO_TETRAHEDRAL_MODES,
+                )
+            )
 
     return events
-
 
 
 def format_stereo_updates(
