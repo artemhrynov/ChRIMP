@@ -553,6 +553,7 @@ def annotate_split_dataset(
                     "mech_smi_min_th": result.mech_smi_min_th,
                     "target_smiles_for_validation": target_smiles,
                     "th_status": result.th_status,
+                    "th_event_types": ",".join(result.th_event_types),
                 }
             )
 
