@@ -97,7 +97,8 @@ def split_mech_smi(mech_smi: str) -> tuple[str, str, str]:
 
 def canonical_unmapped_smiles(
     smiles: str,
-    ignore_stereo_center_maps: set[int] | None = None,
+    keep_stereo_center_maps: set[int] | None = None,
+    compare_stereo: bool = True,
 ) -> str | None:
     if not isinstance(smiles, str) or not smiles:
         return ""
@@ -112,30 +113,41 @@ def canonical_unmapped_smiles(
         except Exception:
             mol.UpdatePropertyCache(strict=False)
 
-    ignore_stereo_center_maps = ignore_stereo_center_maps or set()
+    keep_stereo_center_maps = keep_stereo_center_maps or set()
 
-    for atom in mol.GetAtoms():
-        if atom.GetAtomMapNum() in ignore_stereo_center_maps:
-            atom.SetChiralTag(Chem.rdchem.ChiralType.CHI_UNSPECIFIED)
-    
-    Chem.AssignStereochemistry(mol, force=True, cleanIt=True)
+    if not compare_stereo:
+        Chem.RemoveStereochemistry(mol)
+    else:
+        for atom in mol.GetAtoms():
+            atom_map = atom.GetAtomMapNum()
+
+            if atom_map not in keep_stereo_center_maps:
+                atom.SetChiralTag(Chem.rdchem.ChiralType.CHI_UNSPECIFIED)
+
+        Chem.AssignStereochemistry(mol, force=True, cleanIt=True)
 
     for atom in mol.GetAtoms():
         atom.SetAtomMapNum(0)
 
     try:
-        return Chem.MolToSmiles(mol, isomericSmiles=True, canonical=True)
+        return Chem.MolToSmiles(
+            mol,
+            isomericSmiles=compare_stereo,
+            canonical=True,
+        )
     except Exception:
         return None
 
 
 def canonical_component_counter(
     smiles: str,
-    ignore_stereo_center_maps: set[int] | None = None,
+    keep_stereo_center_maps: set[int] | None = None,
+    compare_stereo: bool = True,
 ) -> Counter[str] | None:
     canonical = canonical_unmapped_smiles(
         smiles,
-        ignore_stereo_center_maps=ignore_stereo_center_maps,
+        keep_stereo_center_maps=keep_stereo_center_maps,
+        compare_stereo=compare_stereo,
     )
     if canonical is None:
         return None
@@ -374,23 +386,32 @@ def with_stereo_updates(
 def validate_model_output(
     predicted_mech_smi: str,
     target_smiles: str,
-    ignore_stereo_center_maps: set[int] | None = None,
+    keep_stereo_center_maps: set[int] | None = None,
+    compare_stereo: bool = True,
 ) -> tuple[bool, str]:
     target_counter = canonical_component_counter(
         target_smiles,
-        ignore_stereo_center_maps=ignore_stereo_center_maps,
+        keep_stereo_center_maps=keep_stereo_center_maps,
+        compare_stereo=compare_stereo,
     )
     if target_counter is None:
         return False, "target_canonicalization_failed"
 
     try:
-        predicted_product = MechSmiles(predicted_mech_smi).prod
+        predicted_msmi = MechSmiles(predicted_mech_smi)
+        
+        try:
+            predicted_product = predicted_msmi.ms_prod.mapped_smiles
+        except Exception:
+            predicted_product = predicted_msmi.prod
+
     except Exception as exc:
         return False, f"product_generation_failed: {type(exc).__name__}: {exc}"
 
     predicted_counter = canonical_component_counter(
         predicted_product,
-        ignore_stereo_center_maps=ignore_stereo_center_maps,
+        keep_stereo_center_maps=keep_stereo_center_maps,
+        compare_stereo=compare_stereo,
     )
     if predicted_counter is None:
         return False, "predicted_product_canonicalization_failed"
@@ -466,10 +487,10 @@ def infer_th_mech_smi(
 
     event_types = tuple(event.event_type for event in events)
 
-    ignore_stereo_center_maps = {
+    keep_stereo_center_maps = {
         event.center_map
         for event in events
-        if event.event_type == "planar_to_tetrahedral"
+        if event.event_type == "tetrahedral_acceptor"
     }
 
     matches: dict[str, tuple[str, ...]] = {}
@@ -480,7 +501,8 @@ def infer_th_mech_smi(
         matches_target, error = validate_model_output(
             candidate,
             target_smiles,
-            ignore_stereo_center_maps=ignore_stereo_center_maps,
+            keep_stereo_center_maps=keep_stereo_center_maps,
+            compare_stereo=compare_stereo,
         )
 
         if error:
